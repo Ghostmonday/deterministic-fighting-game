@@ -439,6 +439,52 @@ namespace NeuralDraft.Trading.Api
         }
 
         /// <summary>
+        /// POST /paper/test-signal
+        /// Test endpoint to simulate game signals (for integration testing)
+        /// </summary>
+        [HttpPost("test-signal")]
+        public IActionResult TestGameSignal([FromBody] TestSignalRequest request)
+        {
+            try
+            {
+                if (request == null)
+                    return BadRequest(new { error = "Request body is required" });
+
+                // Convert to GameSignal format
+                var gameSignal = new TradingService.GameSignal
+                {
+                    symbol = request.Symbol,
+                    frame = request.Frame,
+                    p1Hp = request.P1Hp,
+                    p2Hp = request.P2Hp,
+                    sentimentMilli = request.SentimentMilli,
+                    stateHash = request.StateHash
+                };
+
+                // Process through trading service
+                _tradingService.ProcessGameSignal(gameSignal);
+
+                var openTrades = _tradingEngine.GetOpenTrades();
+                var stats = _tradingEngine.Statistics;
+
+                return Ok(new
+                {
+                    Message = "Test signal processed",
+                    Signal = request,
+                    OpenTrades = openTrades.Count,
+                    WinRate = Math.Round(stats.WinRate, 2),
+                    TotalReturn = Math.Round(stats.TotalReturn, 2),
+                    Timestamp = DateTime.UtcNow
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing test signal");
+                return StatusCode(500, new { error = "Internal server error", details = ex.Message });
+            }
+        }
+
+        /// <summary>
         /// POST /paper/manual
         /// Manually open or close a trade (for testing)
         /// </summary>
@@ -566,6 +612,16 @@ namespace NeuralDraft.Trading.Api
         public decimal Price { get; set; }
         public decimal Quantity { get; set; }
         public string Reason { get; set; }
+    }
+
+    public class TestSignalRequest
+    {
+        public string Symbol { get; set; } = "SDNA";
+        public int SentimentMilli { get; set; } = 0; // -1000 to +1000
+        public int Frame { get; set; } = 0;
+        public short P1Hp { get; set; } = 100;
+        public short P2Hp { get; set; } = 100;
+        public int StateHash { get; set; } = 0;
     }
 
     #endregion

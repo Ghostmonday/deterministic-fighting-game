@@ -17,6 +17,10 @@
 namespace NeuralDraft
 {
     using UnityEngine;
+    using System;
+    using System.Net;
+    using System.Text;
+    using System.Threading;
 
     public class BattleManager : MonoBehaviour
     {
@@ -25,6 +29,15 @@ namespace NeuralDraft
         private RollbackController rollbackController;
         private MapData mapData;
         private CharacterDef[] characterDefs;
+
+        // --- Signal endpoint (local HTTP) ---
+        private HttpListener _listener;
+        private Thread _listenerThread;
+        private volatile int _lastFrame;
+        private volatile short _p1Hp;
+        private volatile short _p2Hp;
+        private volatile int _stateHash; // optional if you compute it
+        private const string SIGNAL_PREFIX = "http://localhost:7777/v1/signal/";
 
         // View objects
         public Transform[] playerTransforms;
@@ -41,6 +54,7 @@ namespace NeuralDraft
         void Start()
         {
             InitializeGame();
+            StartSignalServer();
         }
 
         void InitializeGame()
@@ -72,6 +86,65 @@ namespace NeuralDraft
 
             // Initialize network (simplified - would need proper configuration)
             // udpTransport = new UdpInputTransport(7777, "127.0.0.1", 7778);
+        }
+
+        private void StartSignalServer()
+        {
+            try
+            {
+                _listener = new HttpListener();
+                _listener.Prefixes.Add(SIGNAL_PREFIX);
+                _listener.Start();
+
+                _listenerThread = new Thread(SignalServerLoop);
+                _listenerThread.IsBackground = true;
+                _listenerThread.Start();
+
+                Debug.Log($"Signal endpoint listening: {SIGNAL_PREFIX}");
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"Failed to start signal server: {e}");
+            }
+        }
+
+        private void SignalServerLoop()
+        {
+            while (_listener != null && _listener.IsListening)
+            {
+                try
+                {
+                    var ctx = _listener.GetContext();
+                    var resp = ctx.Response;
+
+                    // Snapshot the latest values (volatile reads)
+                    int frame = _lastFrame;
+                    short p1 = _p1Hp;
+                    short p2 = _p2Hp;
+                    int hash = _stateHash;
+
+                    // Deterministic mapping (simple for Phase 1)
+                    // sentiment in [-1, +1] based on advantage
+                    // Avoid floats if you want: send milli-units instead.
+                    int diff = p1 - p2;                 // health diff
+                    int sentimentMilli = Math.Clamp(diff * 5, -1000, 1000); // 5 milli per HP
+
+                    // JSON (keep tiny)
+                    string json =
+                        $"{{\"symbol\":\"SDNA\",\"frame\":{frame},\"p1Hp\":{p1},\"p2Hp\":{p2},\"sentimentMilli\":{sentimentMilli},\"stateHash\":{hash}}}";
+
+                    byte[] buf = Encoding.UTF8.GetBytes(json);
+                    resp.StatusCode = 200;
+                    resp.ContentType = "application/json";
+                    resp.ContentLength64 = buf.Length;
+                    resp.OutputStream.Write(buf, 0, buf.Length);
+                    resp.OutputStream.Close();
+                }
+                catch
+                {
+                    // swallow to keep endpoint alive during development
+                }
+            }
         }
 
         void FixedUpdate()
@@ -116,6 +189,15 @@ namespace NeuralDraft
 
             // Get current state for rendering
             rollbackController.GetState(rollbackController.GetCurrentFrame()).CopyTo(renderState);
+
+            // Update signal endpoint snapshot
+            _lastFrame = rollbackController.GetCurrentFrame();
+            _p1Hp = renderState.players[0].health;
+            _p2Hp = renderState.players[1].health;
+
+            // Optional: if you have a hash function available
+            // _stateHash = StateHash.Hash(renderState); // if exists in your repo
+            _stateHash = 0;
         }
 
         byte[] CaptureLocalInput()
@@ -191,6 +273,18 @@ namespace NeuralDraft
 
         void OnDestroy()
         {
+            // Clean up signal server
+            try
+            {
+                if (_listener != null)
+                {
+                    _listener.Stop();
+                    _listener.Close();
+                    _listener = null;
+                }
+            }
+            catch { }
+
             // Clean up network resources
             if (udpTransport != null)
             {

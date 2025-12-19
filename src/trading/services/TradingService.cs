@@ -40,15 +40,54 @@ namespace NeuralDraft.Trading.Services
         private readonly Timer _healthTimer;
         private DateTime _lastSuccessfulPoll = DateTime.MinValue;
 
+        // Game signal integration
+        private readonly GameSignalClient _gameSignalClient;
+        private DateTime _lastGameSignalTime = DateTime.MinValue;
+
         public class TradingServiceConfig
         {
             public int PollingIntervalSeconds { get; set; } = 60;
             public string SignalEndpoint { get; set; } = "http://localhost:5000/v1/physics/signal";
+            public string GameSignalEndpoint { get; set; } = "http://localhost:7777/v1/signal/";
             public string[] Symbols { get; set; } = new[] { "BTC", "ETH", "SDNA" };
             public string PriceApiEndpoint { get; set; } = "https://api.coingecko.com/api/v3/simple/price";
             public string TradeHistoryPath { get; set; } = "paper_trades.json";
             public int MaxRetryAttempts { get; set; } = 3;
             public int RetryDelaySeconds { get; set; } = 5;
+            public bool EnableGameSignals { get; set; } = true;
+            public int GameSignalPollingMs { get; set; } = 100; // 10 Hz
+        }
+
+        // Game signal classes
+        public sealed class GameSignalClient
+        {
+            private readonly HttpClient _http = new HttpClient();
+            private readonly string _url;
+
+            public GameSignalClient(string url) => _url = url;
+
+            public async Task<GameSignal?> FetchAsync(CancellationToken ct)
+            {
+                try
+                {
+                    var json = await _http.GetStringAsync(_url, ct);
+                    return JsonSerializer.Deserialize<GameSignal>(json);
+                }
+                catch
+                {
+                    return null;
+                }
+            }
+        }
+
+        public sealed class GameSignal
+        {
+            public string symbol { get; set; } = "SDNA";
+            public int frame { get; set; }
+            public short p1Hp { get; set; }
+            public short p2Hp { get; set; }
+            public int sentimentMilli { get; set; } // [-1000, +1000]
+            public int stateHash { get; set; }
         }
 
         public class SignalResponse
@@ -78,6 +117,13 @@ namespace NeuralDraft.Trading.Services
             // Set reasonable timeout
             _httpClient.Timeout = TimeSpan.FromSeconds(30);
 
+            // Initialize game signal client if enabled
+            if (_config.EnableGameSignals)
+            {
+                _gameSignalClient = new GameSignalClient(_config.GameSignalEndpoint);
+                _logger.LogInformation("Game signal client initialized for {Endpoint}", _config.GameSignalEndpoint);
+            }
+
             // Health check timer (every 5 minutes)
             _healthTimer = new Timer(HealthCheck, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
 
@@ -97,6 +143,13 @@ namespace NeuralDraft.Trading.Services
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to load trade history from {Path}", _config.TradeHistoryPath);
+            }
+
+            // Start game signal polling if enabled
+            Task gameSignalTask = Task.CompletedTask;
+            if (_config.EnableGameSignals)
+            {
+                gameSignalTask = PollGameSignals(stoppingToken);
             }
 
             // Main polling loop
@@ -128,7 +181,113 @@ namespace NeuralDraft.Trading.Services
                 }
             }
 
+            // Wait for game signal polling to complete
+            if (_config.EnableGameSignals)
+            {
+                try
+                {
+                    await gameSignalTask;
+                }
+                catch (OperationCanceledException) { }
+            }
+
             _logger.LogInformation("TradingService stopped");
+        }
+
+        private async Task PollGameSignals(CancellationToken cancellationToken)
+        {
+            _logger.LogInformation("Starting game signal polling at {PollingMs}ms interval", _config.GameSignalPollingMs);
+
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    var gameSignal = await _gameSignalClient.FetchAsync(cancellationToken);
+                    if (gameSignal != null)
+                    {
+                        ProcessGameSignal(gameSignal);
+                        _lastGameSignalTime = DateTime.UtcNow;
+                    }
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Error fetching game signal");
+                }
+
+                try
+                {
+                    await Task.Delay(_config.GameSignalPollingMs, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+            }
+
+            _logger.LogInformation("Game signal polling stopped");
+        }
+
+        public void ProcessGameSignal(GameSignal signal)
+        {
+            try
+            {
+                // Convert milli-sentiment to decimal [-1.0, +1.0]
+                decimal sentiment = signal.sentimentMilli / 1000.0m;
+
+                // Get current price (use mock for prototype)
+                decimal price = GetMockPrice(signal.symbol);
+
+                // Simple decision rule for prototype
+                if (signal.sentimentMilli >= 200)  // +0.2 sentiment
+                {
+                    // Check if we should open LONG
+                    bool hasOpenPosition = false;
+                    foreach (var trade in _tradingEngine.GetOpenTrades())
+                    {
+                        if (trade.symbol == signal.symbol && trade.IsOpen)
+                        {
+                            hasOpenPosition = true;
+                            break;
+                        }
+                    }
+
+                    if (!hasOpenPosition)
+                    {
+                        _tradingEngine.ProcessSignal(signal.symbol, sentiment, price);
+                        _logger.LogDebug("Game signal triggered LONG for {Symbol}: sentiment={Sentiment}, frame={Frame}",
+                            signal.symbol, sentiment, signal.frame);
+                    }
+                }
+                else if (signal.sentimentMilli <= -200)  // -0.2 sentiment
+                {
+                    // Check if we should open SHORT
+                    bool hasOpenPosition = false;
+                    foreach (var trade in _tradingEngine.GetOpenTrades())
+                    {
+                        if (trade.symbol == signal.symbol && trade.IsOpen)
+                        {
+                            hasOpenPosition = true;
+                            break;
+                        }
+                    }
+
+                    if (!hasOpenPosition)
+                    {
+                        _tradingEngine.ProcessSignal(signal.symbol, sentiment, price);
+                        _logger.LogDebug("Game signal triggered SHORT for {Symbol}: sentiment={Sentiment}, frame={Frame}",
+                            signal.symbol, sentiment, signal.frame);
+                    }
+                }
+                // else: FLAT - do nothing for prototype
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing game signal for frame {Frame}", signal.frame);
+            }
         }
 
         private async Task PollAndProcessSignals(CancellationToken cancellationToken)
@@ -292,6 +451,20 @@ namespace NeuralDraft.Trading.Services
                 var timeSinceLastPoll = DateTime.UtcNow - _lastSuccessfulPoll;
                 var isHealthy = timeSinceLastPoll.TotalSeconds < (_config.PollingIntervalSeconds * 2);
 
+                // Check game signal health if enabled
+                bool gameSignalsHealthy = true;
+                if (_config.EnableGameSignals)
+                {
+                    var timeSinceLastGameSignal = DateTime.UtcNow - _lastGameSignalTime;
+                    gameSignalsHealthy = timeSinceLastGameSignal.TotalSeconds < 10; // 10 seconds threshold
+
+                    if (!gameSignalsHealthy)
+                    {
+                        _logger.LogWarning("Game signal health check: Last signal was {TimeAgo} ago",
+                            timeSinceLastGameSignal);
+                    }
+                }
+
                 if (!isHealthy)
                 {
                     _logger.LogWarning("Health check failed: Last successful poll was {TimeAgo} ago",
@@ -300,12 +473,17 @@ namespace NeuralDraft.Trading.Services
                 else
                 {
                     var stats = _tradingEngine.Statistics;
+                    var gameSignalStatus = _config.EnableGameSignals ?
+                        $"Game signals: {(gameSignalsHealthy ? "healthy" : "unhealthy")}" :
+                        "Game signals: disabled";
+
                     _logger.LogInformation(
-                        "TradingService health: {OpenTrades} open trades, {TotalTrades} total, Win Rate: {WinRate}%, Return: {Return}%",
+                        "TradingService health: {OpenTrades} open trades, {TotalTrades} total, Win Rate: {WinRate}%, Return: {Return}%, {GameSignalStatus}",
                         _tradingEngine.GetOpenTrades().Count,
                         stats.TotalTrades,
                         stats.WinRate.ToString("F1"),
-                        stats.TotalReturn.ToString("F1"));
+                        stats.TotalReturn.ToString("F1"),
+                        gameSignalStatus);
                 }
             }
             catch (Exception ex)
@@ -341,6 +519,7 @@ namespace NeuralDraft.Trading.Services
             {
                 IsRunning = !_stoppingToken.IsCancellationRequested,
                 LastSuccessfulPoll = _lastSuccessfulPoll,
+                LastGameSignalTime = _lastGameSignalTime,
                 NextPollInSeconds = GetNextPollSeconds(),
                 Config = _config,
                 Statistics = _tradingEngine.Statistics
@@ -362,6 +541,7 @@ namespace NeuralDraft.Trading.Services
     {
         public bool IsRunning { get; set; }
         public DateTime LastSuccessfulPoll { get; set; }
+        public DateTime LastGameSignalTime { get; set; }
         public int NextPollInSeconds { get; set; }
         public TradingService.TradingServiceConfig Config { get; set; }
         public TradingEngine.TradingStatistics Statistics { get; set; }
