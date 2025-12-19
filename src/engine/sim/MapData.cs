@@ -18,7 +18,24 @@ namespace NeuralDraft
 {
     public struct MapData
     {
+        /// <summary>
+        /// Axis-aligned bounding boxes representing solid collision geometry.
+        /// All coordinates use Y-Up system (positive Y = up).
+        /// </summary>
         public AABB[] SolidBlocks;
+
+        /// <summary>
+        /// Absolute world Y coordinate below which all entities are destroyed.
+        /// Uses Y-Up coordinate system (negative values = below origin).
+        ///
+        /// SEMANTICS:
+        /// - Any entity with position.Y < KillFloorY is immediately destroyed
+        /// - Applies to both players and projectiles
+        /// - Used for pit deaths, void zones, and stage boundaries
+        /// - Value is in fixed-point units (multiply by Fx.SCALE for world units)
+        ///
+        /// EXAMPLE: KillFloorY = -2000 means entities die 2000 units below origin
+        /// </summary>
         public int KillFloorY;
     }
 }

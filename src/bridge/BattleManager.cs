@@ -24,6 +24,7 @@ namespace NeuralDraft
         private GameState renderState;
         private RollbackController rollbackController;
         private MapData mapData;
+        private CharacterDef[] characterDefs;
 
         // View objects
         public Transform[] playerTransforms;
@@ -55,12 +56,17 @@ namespace NeuralDraft
             mapData = new MapData();
             mapData.KillFloorY = -2000 * Fx.SCALE / 1000; // -2000 units below origin
 
-            // Initialize player positions
+            // Initialize character definitions
+            characterDefs = new CharacterDef[GameState.MAX_PLAYERS];
+            characterDefs[0] = CharacterDef.CreateTitan();     // Player 1: Titan
+            characterDefs[1] = CharacterDef.CreateNinja();     // Player 2: Ninja
+
+            // Initialize player positions and health
             for (int i = 0; i < GameState.MAX_PLAYERS; i++)
             {
                 currentState.players[i].posX = (i == 0 ? -500 : 500) * Fx.SCALE / 1000;
                 currentState.players[i].posY = 1000 * Fx.SCALE / 1000; // Start above floor
-                currentState.players[i].health = 100;
+                currentState.players[i].health = (short)characterDefs[i].baseHealth;
                 currentState.players[i].grounded = 1;
             }
 

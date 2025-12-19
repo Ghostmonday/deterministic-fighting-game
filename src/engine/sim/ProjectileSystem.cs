@@ -21,12 +21,16 @@ namespace NeuralDraft
         private const int SUBSTEP_THRESHOLD = 175;
         private const int PROJECTILE_SIZE = 20 * Fx.SCALE / 1000;
 
-        public static void UpdateProjectile(ref ProjectileState projectile, MapData map, int deltaTime)
+        public static void UpdateProjectile(ref ProjectileState projectile, MapData map, ref int activeCountDelta)
         {
             if (projectile.active == 0) return;
 
-            projectile.lifetimeRemaining -= (short)deltaTime;
-            if (projectile.lifetimeRemaining <= 0) { projectile.active = 0; return; }
+            projectile.lifetimeRemaining -= 1;
+            if (projectile.lifetimeRemaining <= 0) {
+                projectile.active = 0;
+                activeCountDelta--;
+                return;
+            }
 
             int velXAbs = System.Math.Abs(projectile.velX);
             int velYAbs = System.Math.Abs(projectile.velY);
@@ -37,12 +41,11 @@ namespace NeuralDraft
 
             int stepVelX = projectile.velX / substeps;
             int stepVelY = projectile.velY / substeps;
-            int stepDeltaTime = deltaTime / substeps;
 
             for (int step = 0; step < substeps; step++)
             {
-                int newPosX = projectile.posX + stepVelX * stepDeltaTime / Fx.SCALE;
-                int newPosY = projectile.posY + stepVelY * stepDeltaTime / Fx.SCALE;
+                int newPosX = projectile.posX + stepVelX;
+                int newPosY = projectile.posY + stepVelY;
 
                 AABB projBox = new AABB {
                     minX = newPosX - PROJECTILE_SIZE / 2, maxX = newPosX + PROJECTILE_SIZE / 2,
@@ -51,35 +54,66 @@ namespace NeuralDraft
 
                 bool collided = false;
                 if (map.SolidBlocks != null) {
-                    foreach (var block in map.SolidBlocks) {
+                    for (int blockIndex = 0; blockIndex < map.SolidBlocks.Length; blockIndex++) {
+                        var block = map.SolidBlocks[blockIndex];
                         if (AABB.Overlaps(projBox, block)) { collided = true; break; }
                     }
                 }
 
                 if (collided || newPosY < map.KillFloorY) { // Check Y < Floor
-                    projectile.active = 0; return;
+                    projectile.active = 0;
+                    activeCountDelta--;
+                    return;
                 }
 
                 projectile.posX = newPosX; projectile.posY = newPosY;
             }
         }
 
-        public static void UpdateAllProjectiles(GameState state, MapData map, int deltaTime) {
-            for (int i = 0; i < GameState.MAX_PROJECTILES; i++)
-                UpdateProjectile(ref state.projectiles[i], map, deltaTime);
+        public static void UpdateAllProjectiles(GameState state, MapData map) {
+            int activeCountDelta = 0;
+
+            // Only iterate through active projectiles using swap-remove pattern
+            for (int i = 0; i < state.activeProjectileCount; i++) {
+                UpdateProjectile(ref state.projectiles[i], map, ref activeCountDelta);
+            }
+
+            // Update active count
+            state.activeProjectileCount += activeCountDelta;
+
+            // If we have negative delta (projectiles were deactivated),
+            // we would normally compact the array here, but for determinism
+            // we keep the current structure and rely on activeProjectileCount
         }
 
         public static int SpawnProjectile(GameState state, int posX, int posY, int velX, int velY, short lifetime, ProjectileType type) {
-            for (int i = 0; i < GameState.MAX_PROJECTILES; i++) {
+            // First try to find an inactive slot within the active range
+            for (int i = 0; i < state.activeProjectileCount; i++) {
                 if (state.projectiles[i].active == 0) {
-                    state.projectiles[i].uid = i; state.projectiles[i].active = 1;
-                    state.projectiles[i].posX = posX; state.projectiles[i].posY = posY;
-                    state.projectiles[i].velX = velX; state.projectiles[i].velY = velY;
-                    state.projectiles[i].lifetimeRemaining = lifetime;
+                    InitializeProjectile(ref state.projectiles[i], state.nextProjectileUid++, posX, posY, velX, velY, lifetime);
                     return i;
                 }
             }
-            return -1;
+
+            // If no inactive slots found and we have room, add to the end
+            if (state.activeProjectileCount < GameState.MAX_PROJECTILES) {
+                int index = state.activeProjectileCount;
+                InitializeProjectile(ref state.projectiles[index], state.nextProjectileUid++, posX, posY, velX, velY, lifetime);
+                state.activeProjectileCount++;
+                return index;
+            }
+
+            return -1; // No available projectile slot
+        }
+
+        private static void InitializeProjectile(ref ProjectileState projectile, int uid, int posX, int posY, int velX, int velY, short lifetime) {
+            projectile.uid = uid;
+            projectile.active = 1;
+            projectile.posX = posX;
+            projectile.posY = posY;
+            projectile.velX = velX;
+            projectile.velY = velY;
+            projectile.lifetimeRemaining = lifetime;
         }
     }
 }

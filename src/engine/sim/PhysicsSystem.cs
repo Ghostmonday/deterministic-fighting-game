@@ -18,16 +18,12 @@ namespace NeuralDraft
 {
     public static class PhysicsSystem
     {
-        private const int GRAVITY = 45;
-        private const int MAX_FALL_SPEED = 3000;
-        private const int WALK_SPEED = 800;
-        private const int JUMP_FORCE = 1500;
         private const int GROUND_FRICTION = 200;
 
-        public static void ApplyMovementInput(ref PlayerState player, int inputX, bool jumpPressed, bool grounded)
+        public static void ApplyMovementInput(ref PlayerState player, CharacterDef characterDef, int inputX, bool jumpPressed, bool grounded)
         {
             if (inputX != 0) {
-                player.velX = inputX * WALK_SPEED;
+                player.velX = inputX * characterDef.walkSpeed;
                 player.facing = inputX > 0 ? Facing.RIGHT : Facing.LEFT;
             } else {
                 if (player.velX > 0) player.velX = System.Math.Max(0, player.velX - GROUND_FRICTION);
@@ -35,59 +31,62 @@ namespace NeuralDraft
             }
 
             if (jumpPressed && grounded) {
-                player.velY = JUMP_FORCE; // Positive is UP
+                player.velY = characterDef.jumpForce; // Positive is UP
                 player.grounded = 0;
             }
         }
 
-        public static void ApplyGravity(ref PlayerState player)
+        public static void ApplyGravity(ref PlayerState player, CharacterDef characterDef)
         {
             if (player.grounded == 0) {
-                player.velY -= GRAVITY; // Subtract for Y-Up
-                if (player.velY < -MAX_FALL_SPEED) player.velY = -MAX_FALL_SPEED;
+                player.velY -= characterDef.gravity; // Subtract for Y-Up
+                if (player.velY < -characterDef.maxFallSpeed) player.velY = -characterDef.maxFallSpeed;
             } else if (player.velY < 0) {
                 player.velY = 0;
             }
         }
 
-        public static void StepAndCollide(ref PlayerState player, MapData map, int deltaTime)
+        public static void StepAndCollide(ref PlayerState player, CharacterDef characterDef, MapData map)
         {
-            int newPosX = player.posX + player.velX * deltaTime / Fx.SCALE;
-            int newPosY = player.posY + player.velY * deltaTime / Fx.SCALE;
+            int newPosX = player.posX + player.velX;
+            int newPosY = player.posY + player.velY;
 
+            // Calculate hitbox bounds based on character definition
+            int halfWidth = characterDef.hitboxWidth / 2;
             AABB playerBounds = new AABB {
-                minX = newPosX - 50 * Fx.SCALE / 1000,
-                maxX = newPosX + 50 * Fx.SCALE / 1000,
-                minY = newPosY,
-                maxY = newPosY + 200 * Fx.SCALE / 1000
+                minX = newPosX - halfWidth,
+                maxX = newPosX + halfWidth,
+                minY = newPosY + characterDef.hitboxOffsetY,
+                maxY = newPosY + characterDef.hitboxOffsetY + characterDef.hitboxHeight
             };
 
             player.grounded = 0;
             if (map.SolidBlocks != null) {
-                foreach (var block in map.SolidBlocks) {
+                for (int blockIndex = 0; blockIndex < map.SolidBlocks.Length; blockIndex++) {
+                    var block = map.SolidBlocks[blockIndex];
                     if (AABB.Overlaps(playerBounds, block)) {
                         int overlapX = System.Math.Min(playerBounds.maxX - block.minX, block.maxX - playerBounds.minX);
                         int overlapY = System.Math.Min(playerBounds.maxY - block.minY, block.maxY - playerBounds.minY);
 
                         if (overlapX < overlapY) {
-                            if (playerBounds.minX < block.minX) newPosX = block.minX - 50 * Fx.SCALE / 1000;
-                            else newPosX = block.maxX + 50 * Fx.SCALE / 1000;
+                            if (playerBounds.minX < block.minX) newPosX = block.minX - halfWidth;
+                            else newPosX = block.maxX + halfWidth;
                             player.velX = 0;
                         } else {
                             if (playerBounds.minY < block.minY) { // Hit Ceiling
-                                newPosY = block.minY - 200 * Fx.SCALE / 1000;
+                                newPosY = block.minY - characterDef.hitboxHeight - characterDef.hitboxOffsetY;
                                 player.velY = 0;
                             } else { // Land on Floor
-                                newPosY = block.maxY;
+                                newPosY = block.maxY - characterDef.hitboxOffsetY;
                                 player.velY = 0;
                                 player.grounded = 1;
                             }
                         }
                         // Update bounds for next check
-                        playerBounds.minX = newPosX - 50 * Fx.SCALE / 1000;
-                        playerBounds.maxX = newPosX + 50 * Fx.SCALE / 1000;
-                        playerBounds.minY = newPosY;
-                        playerBounds.maxY = newPosY + 200 * Fx.SCALE / 1000;
+                        playerBounds.minX = newPosX - halfWidth;
+                        playerBounds.maxX = newPosX + halfWidth;
+                        playerBounds.minY = newPosY + characterDef.hitboxOffsetY;
+                        playerBounds.maxY = newPosY + characterDef.hitboxOffsetY + characterDef.hitboxHeight;
                     }
                 }
             }

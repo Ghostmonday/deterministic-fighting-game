@@ -21,12 +21,30 @@ namespace NeuralDraft
         public const int MAX_PLAYERS = 2;
         public const int MAX_PROJECTILES = 64;
 
+        // ================================================================================
+        // SIMULATION ORDER (CRITICAL FOR DETERMINISM - DO NOT CHANGE)
+        // ================================================================================
+        // 1. Input Processing (RollbackController)
+        // 2. Movement (PhysicsSystem.ApplyMovementInput)
+        // 3. Gravity (PhysicsSystem.ApplyGravity)
+        // 4. Collision (PhysicsSystem.StepAndCollide)
+        // 5. Projectile Update (ProjectileSystem.UpdateAllProjectiles)
+        // 6. Combat Resolution (CombatResolver.ResolveCombat)
+        // 7. Action/Animation Updates
+        // ================================================================================
+
         public int frameIndex;
+        public int nextProjectileUid;
+        public int activeProjectileCount;
         public PlayerState[] players;
         public ProjectileState[] projectiles;
 
         public GameState()
         {
+            frameIndex = 0;
+            nextProjectileUid = 0;
+            activeProjectileCount = 0;
+
             players = new PlayerState[MAX_PLAYERS];
             for (int i = 0; i < MAX_PLAYERS; i++)
             {
@@ -43,6 +61,8 @@ namespace NeuralDraft
         public void CopyTo(GameState dst)
         {
             dst.frameIndex = frameIndex;
+            dst.nextProjectileUid = nextProjectileUid;
+            dst.activeProjectileCount = activeProjectileCount;
 
             for (int i = 0; i < MAX_PLAYERS; i++)
             {
