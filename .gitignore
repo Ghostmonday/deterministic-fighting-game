@@ -1,0 +1,75 @@
+# Unity
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+
+# MemoryCaptures
+MemoryCaptures/
+
+# Asset meta files
+*.meta
+
+# Auto-generated Android files
+gradle/
+.gradle/
+
+# Auto-generated VS/MD files
+ExportedObj/
+.consulo/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.opendb
+*.VC.db
+
+# Unity3D generated meta files
+*.pidb.meta
+*.pdb.meta
+
+# Unity3D Generated File On Crash Reports
+sysinfo.txt
+
+# Builds
+*.apk
+*.aab
+*.unitypackage
+
+# Crashlytics generated file
+crashlytics-build.properties
+
+# VS Code
+.vscode/
+
+# Rider
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Visual Studio
+.vs/
+
+# Compiled binaries
+*.dll
+*.exe
+*.so
+*.dylib
+
+# User-specific files
+*.userprefs
+
+# Unity auto-generated
+ProjectSettings/ProjectSettings.asset

@@ -1,0 +1,7 @@
+{
+  "action_id": "NINJA_SHURIKEN",
+  "timeline": { "startup": 4, "active": 2, "recovery": 12 },
+  "events": [
+    { "frame": 4, "type": "SPAWN_PROJECTILE", "payload": { "type": "SHURIKEN", "speed_x": 1500 } }
+  ]
+}
