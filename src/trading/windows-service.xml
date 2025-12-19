@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <runtime>
+    <gcServer enabled="true"/>
+    <gcConcurrent enabled="true"/>
+    <ThreadPool minWorkerThreads="50" minCompletionPortThreads="50"/>
+  </runtime>
+
+  <appSettings>
+    <add key="ServiceName" value="NeuralDraftPaperTrader"/>
+    <add key="ServiceDisplayName" value="Neural Draft Paper Trading Service"/>
+    <add key="ServiceDescription" value="Paper trading system that simulates trading based on sentiment signals from the deterministic fighting game engine."/>
+    <add key="LogDirectory" value="C:\ProgramData\NeuralDraft\Trading\Logs"/>
+    <add key="DataDirectory" value="C:\ProgramData\NeuralDraft\Trading\Data"/>
+    <add key="ConfigDirectory" value="C:\ProgramData\NeuralDraft\Trading\Config"/>
+  </appSettings>
+
+  <system.serviceProcess>
+    <services>
+      <service
+        name="NeuralDraft.Trading.WindowsService.TradingWindowsService"
+        serviceInstallerType="System.ServiceProcess.ServiceInstaller">
+
+        <serviceProcessInstaller
+          Account="LocalSystem"
+          Username=""
+          Password=""
+          HelpText="Installs the Neural Draft Paper Trading Service">
+        </serviceProcessInstaller>
+
+        <serviceInstaller
+          ServiceName="NeuralDraftPaperTrader"
+          DisplayName="Neural Draft Paper Trading Service"
+          Description="Paper trading system that simulates trading based on sentiment signals from the deterministic fighting game engine."
+          StartType="Automatic"
+          DelayedAutoStart="true">
+        </serviceInstaller>
+
+        <serviceDependencies>
+          <add key="EventLog" value=""/>
+          <add key="HTTP" value=""/>
+          <add key="NetTcpPortSharing" value=""/>
+        </serviceDependencies>
+
+        <serviceTriggers>
+          <add type="System.ServiceProcess.ServiceTrigger">
+            <Type>NetworkConnectivityChange</Type>
+            <Action>Start</Action>
+            <SubType>Connected</SubType>
+          </add>
+        </serviceTriggers>
+
+      </service>
+    </services>
+  </system.serviceProcess>
+
+  <system.diagnostics>
+    <sources>
+      <source name="NeuralDraft.Trading" switchName="sourceSwitch" switchType="System.Diagnostics.SourceSwitch">
+        <listeners>
+          <add name="eventLog"/>
+          <add name="fileLog"/>
+          <add name="console"/>
+        </listeners>
+      </source>
+    </sources>
+
+    <switches>
+      <add name="sourceSwitch" value="Information"/>
+    </switches>
+
+    <sharedListeners>
+      <add
+        name="eventLog"
+        type="System.Diagnostics.EventLogTraceListener"
+        initializeData="NeuralDraftPaperTrader">
+        <filter type="System.Diagnostics.EventTypeFilter" initializeData="Information"/>
+      </add>
+
+      <add
+        name="fileLog"
+        type="System.Diagnostics.TextWriterTraceListener"
+        initializeData="C:\ProgramData\NeuralDraft\Trading\Logs\trading-service.log">
+        <filter type="System.Diagnostics.EventTypeFilter" initializeData="Information"/>
+      </add>
+
+      <add
+        name="console"
+        type="System.Diagnostics.ConsoleTraceListener">
+        <filter type="System.Diagnostics.EventTypeFilter" initializeData="Warning"/>
+      </add>
+    </sharedListeners>
+
+    <trace autoflush="true" indentsize="4">
+      <listeners>
+        <add name="eventLog"/>
+        <add name="fileLog"/>
+      </listeners>
+    </trace>
+  </system.diagnostics>
+
+  <system.web>
+    <compilation debug="false" targetFramework="4.8"/>
+    <httpRuntime targetFramework="4.8" maxRequestLength="1048576"/>
+  </system.web>
+
+  <system.net>
+    <connectionManagement>
+      <add address="*" maxconnection="100"/>
+    </connectionManagement>
+    <defaultProxy enabled="true" useDefaultCredentials="true">
+      <proxy usesystemdefault="True"/>
+    </defaultProxy>
+    <settings>
+      <servicePointManager expect100Continue="false"/>
+      <ipv6 enabled="true"/>
+    </settings>
+  </system.net>
+
+  <startup>
+    <supportedRuntime version="v4.0" sku=".NETFramework,Version=v4.8"/>
+    <supportedRuntime version="v2.0.50727"/>
+  </startup>
+
+  <windowsServiceHostingEnvironment>
+    <serviceAutoStartProviders>
+      <add name="NeuralDraftPaperTrader" type="NeuralDraft.Trading.WindowsService.TradingWindowsService, NeuralDraft.Trading"/>
+    </serviceAutoStartProviders>
+
+    <serviceHostingEnvironment multipleSiteBindingsEnabled="true" minFreeMemoryPercentageToActivateService="5">
+      <serviceActivations>
+        <add factory="System.ServiceModel.Activation.ServiceHostFactory"
+             relativeAddress="./TradingService.svc"
+             service="NeuralDraft.Trading.WindowsService.TradingWindowsService"/>
+      </serviceActivations>
+    </serviceHostingEnvironment>
+  </windowsServiceHostingEnvironment>
+
+  <location path="NeuralDraftPaperTrader">
+    <system.webServer>
+      <modules runAllManagedModulesForAllRequests="true">
+        <add name="TradingServiceModule" type="NeuralDraft.Trading.WindowsService.TradingServiceModule, NeuralDraft.Trading"/>
+      </modules>
+      <handlers>
+        <add name="TradingServiceHandler"
+             path="*.svc"
+             verb="*"
+             type="System.ServiceModel.Activation.ServiceHttpHandlerFactory, System.ServiceModel.Activation, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35"
+             preCondition="integratedMode"/>
+      </handlers>
+      <security>
+        <requestFiltering>
+          <requestLimits maxAllowedContentLength="52428800"/>
+        </requestFiltering>
+      </security>
+    </system.webServer>
+  </location>
+</configuration>
