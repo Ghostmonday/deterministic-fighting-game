@@ -53,13 +53,13 @@ namespace NeuralDraft
 
             // Initialize map data (simplified)
             mapData = new MapData();
-            mapData.KillFloorY = 10000 * Fx.SCALE / 1000;
+            mapData.KillFloorY = -2000 * Fx.SCALE / 1000; // -2000 units below origin
 
             // Initialize player positions
             for (int i = 0; i < GameState.MAX_PLAYERS; i++)
             {
                 currentState.players[i].posX = (i == 0 ? -500 : 500) * Fx.SCALE / 1000;
-                currentState.players[i].posY = 0;
+                currentState.players[i].posY = 1000 * Fx.SCALE / 1000; // Start above floor
                 currentState.players[i].health = 100;
                 currentState.players[i].grounded = 1;
             }
