@@ -63,29 +63,66 @@ namespace NeuralDraft
             currentState = new GameState();
             renderState = new GameState();
 
-            // Initialize rollback controller
-            rollbackController = new RollbackController();
-
-            // Initialize map data (simplified)
-            mapData = new MapData();
-            mapData.KillFloorY = -2000 * Fx.SCALE / 1000; // -2000 units below origin
-
-            // Initialize character definitions
+            // Initialize rollback controller with new API
+            mapData = CreateTestMap();
             characterDefs = new CharacterDef[GameState.MAX_PLAYERS];
-            characterDefs[0] = CharacterDef.CreateTitan();     // Player 1: Titan
-            characterDefs[1] = CharacterDef.CreateNinja();     // Player 2: Ninja
+            // TEST MATCHUP: Guardian (High Friction) vs Plague Doctor (Low Friction)
+            characterDefs[0] = CharacterDef.GetDefault(2);     // Earth East (Guardian)
+            characterDefs[1] = CharacterDef.GetDefault(5);     // Venom West (Plague Doctor)
+
+            rollbackController = new RollbackController(mapData, characterDefs, isDevelopment: true);
 
             // Initialize player positions and health
             for (int i = 0; i < GameState.MAX_PLAYERS; i++)
             {
-                currentState.players[i].posX = (i == 0 ? -500 : 500) * Fx.SCALE / 1000;
+                currentState.players[i].posX = (i == 0 ? -2000 : 2000) * Fx.SCALE / 1000;
                 currentState.players[i].posY = 1000 * Fx.SCALE / 1000; // Start above floor
                 currentState.players[i].health = (short)characterDefs[i].baseHealth;
                 currentState.players[i].grounded = 1;
+                currentState.players[i].facing = i == 0 ? Facing.RIGHT : Facing.LEFT;
             }
 
             // Initialize network (simplified - would need proper configuration)
             // udpTransport = new UdpInputTransport(7777, "127.0.0.1", 7778);
+        }
+
+        private MapData CreateTestMap()
+        {
+            // Create a simple flat stage with platforms
+            AABB[] solidBlocks = new AABB[3];
+
+            // Main ground platform
+            solidBlocks[0] = new AABB
+            {
+                minX = -5000 * Fx.SCALE / 1000,
+                maxX = 5000 * Fx.SCALE / 1000,
+                minY = 0,
+                maxY = 100 * Fx.SCALE / 1000  // 100 units thick
+            };
+
+            // Left platform
+            solidBlocks[1] = new AABB
+            {
+                minX = -3000 * Fx.SCALE / 1000,
+                maxX = -2000 * Fx.SCALE / 1000,
+                minY = 500 * Fx.SCALE / 1000,
+                maxY = 600 * Fx.SCALE / 1000
+            };
+
+            // Right platform
+            solidBlocks[2] = new AABB
+            {
+                minX = 2000 * Fx.SCALE / 1000,
+                maxX = 3000 * Fx.SCALE / 1000,
+                minY = 500 * Fx.SCALE / 1000,
+                maxY = 600 * Fx.SCALE / 1000
+            };
+
+            return new MapData
+            {
+                SolidBlocks = solidBlocks,
+                KillFloorY = -10000 * Fx.SCALE / 1000  // Very low kill floor
+            };
         }
 
         private void StartSignalServer()
@@ -163,29 +200,14 @@ namespace NeuralDraft
         void SimulateFrame()
         {
             // Capture local input
-            byte[] localInputs = CaptureLocalInput();
-            rollbackController.SaveInputs(rollbackController.GetCurrentFrame(), localInputs, localPlayerIndex);
+            ushort p0Inputs = CaptureLocalInputs(0);
+            ushort p1Inputs = CaptureLocalInputs(1);
 
-            // Send inputs over network (in real implementation)
-            // if (udpTransport != null)
-            // {
-            //     udpTransport.SendInputs(localInputs, rollbackController.GetCurrentFrame());
-            // }
+            // Create input frame
+            InputFrame inputs = new InputFrame(rollbackController.GetCurrentFrame(), p0Inputs, p1Inputs);
 
-            // Check for remote inputs
-            // if (udpTransport != null)
-            // {
-            //     byte[] remoteInputs;
-            //     int frame;
-            //     int playerIndex;
-            //     if (udpTransport.TryReceive(out remoteInputs, out frame, out playerIndex))
-            //     {
-            //         rollbackController.OnRemoteInput(frame, remoteInputs, playerIndex);
-            //     }
-            // }
-
-            // Run prediction
-            rollbackController.TickPrediction();
+            // Save inputs and run prediction
+            rollbackController.TickPrediction(inputs);
 
             // Get current state for rendering
             rollbackController.GetState(rollbackController.GetCurrentFrame()).CopyTo(renderState);
@@ -195,27 +217,35 @@ namespace NeuralDraft
             _p1Hp = renderState.players[0].health;
             _p2Hp = renderState.players[1].health;
 
-            // Optional: if you have a hash function available
-            // _stateHash = StateHash.Hash(renderState); // if exists in your repo
-            _stateHash = 0;
+            // Compute state hash for signal endpoint
+            _stateHash = (int)StateHash.Compute(renderState);
         }
 
-        byte[] CaptureLocalInput()
+        ushort CaptureLocalInputs(int playerIndex)
         {
-            // Simplified input capture
-            byte[] inputs = new byte[8];
+            ushort inputs = 0;
 
-            // Horizontal input
-            float horizontal = Input.GetAxis("Horizontal");
-            inputs[0] = (byte)(Mathf.Clamp(horizontal * 127 + 127, 0, 255));
+            // Player 1 uses arrow keys, Player 2 uses WASD (for testing)
+            string horizontalAxis = playerIndex == 0 ? "Horizontal" : "Horizontal2";
+            string verticalAxis = playerIndex == 0 ? "Vertical" : "Vertical2";
+            string jumpButton = playerIndex == 0 ? "Jump" : "Jump2";
+            string attackButton = playerIndex == 0 ? "Fire1" : "Fire2";
+
+            // Horizontal movement
+            float horizontal = Input.GetAxis(horizontalAxis);
+            if (horizontal < -0.5f) inputs = (ushort)(inputs | (ushort)InputBits.LEFT);
+            if (horizontal > 0.5f) inputs = (ushort)(inputs | (ushort)InputBits.RIGHT);
+
+            // Vertical movement
+            float vertical = Input.GetAxis(verticalAxis);
+            if (vertical > 0.5f) inputs = (ushort)(inputs | (ushort)InputBits.UP);
+            if (vertical < -0.5f) inputs = (ushort)(inputs | (ushort)InputBits.DOWN);
 
             // Jump button
-            inputs[1] = Input.GetButton("Jump") ? (byte)1 : (byte)0;
+            if (Input.GetButton(jumpButton)) inputs = (ushort)(inputs | (ushort)InputBits.JUMP);
 
-            // Attack buttons
-            inputs[2] = Input.GetButton("Fire1") ? (byte)1 : (byte)0;
-            inputs[3] = Input.GetButton("Fire2") ? (byte)1 : (byte)0;
-            inputs[4] = Input.GetButton("Fire3") ? (byte)1 : (byte)0;
+            // Attack button
+            if (Input.GetButton(attackButton)) inputs = (ushort)(inputs | (ushort)InputBits.ATTACK);
 
             return inputs;
         }

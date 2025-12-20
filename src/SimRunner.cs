@@ -77,10 +77,10 @@ namespace NeuralDraft.SimRunner
             // Create map data (simple flat stage)
             MapData map = CreateTestMap();
 
-            // Create character definitions (Titan vs Ninja)
+            // Create character definitions (Guardian vs Plague Doctor - friction test)
             CharacterDef[] characterDefs = new CharacterDef[GameState.MAX_PLAYERS];
-            characterDefs[0] = CharacterDef.CreateTitan();
-            characterDefs[1] = CharacterDef.CreateNinja();
+            characterDefs[0] = CharacterDef.GetDefault(2); // Earth East (Guardian)
+            characterDefs[1] = CharacterDef.GetDefault(5); // Venom West (Plague Doctor)
 
             // Initialize game state
             GameState state = new GameState();
@@ -117,7 +117,9 @@ namespace NeuralDraft.SimRunner
                 // Progress reporting
                 if (frame % 1000 == 0)
                 {
-                    Console.WriteLine("  Frame " + frame + "/" + TOTAL_FRAMES + " - Player 0 Health: " + state.players[0].health + ", Player 1 Health: " + state.players[1].health);
+                    Console.WriteLine("  Frame " + frame + "/" + TOTAL_FRAMES + " - " +
+                        characterDefs[0].name + " Health: " + state.players[0].health + ", " +
+                        characterDefs[1].name + " Health: " + state.players[1].health);
                 }
 
                 // Get updated state
@@ -125,6 +127,8 @@ namespace NeuralDraft.SimRunner
             }
 
             Console.WriteLine("Simulation completed. Final frame: " + state.frameIndex);
+            Console.WriteLine("Test Matchup: " + characterDefs[0].name + " (Friction: " + characterDefs[0].groundFriction +
+                ") vs " + characterDefs[1].name + " (Friction: " + characterDefs[1].groundFriction + ")");
 
             // Compute final state hash
             uint finalHash = StateHash.Compute(state);
