@@ -106,13 +106,13 @@ namespace NeuralDraft
 
                     // Parse input bits
                     int inputX = 0;
-                    if ((playerInputs & InputBits.LEFT) != 0) inputX = -1;
-                    if ((playerInputs & InputBits.RIGHT) != 0) inputX = 1;
+                    if ((playerInputs & (ushort)InputBits.LEFT) != 0) inputX = -1;
+                    if ((playerInputs & (ushort)InputBits.RIGHT) != 0) inputX = 1;
 
-                    bool jumpPressed = (playerInputs & InputBits.JUMP) != 0;
-                    bool attackPressed = (playerInputs & InputBits.ATTACK) != 0;
-                    bool specialPressed = (playerInputs & InputBits.SPECIAL) != 0;
-                    bool defendPressed = (playerInputs & InputBits.DEFEND) != 0;
+                    bool jumpPressed = (playerInputs & (ushort)InputBits.JUMP) != 0;
+                    bool attackPressed = (playerInputs & (ushort)InputBits.ATTACK) != 0;
+                    bool specialPressed = (playerInputs & (ushort)InputBits.SPECIAL) != 0;
+                    bool defendPressed = (playerInputs & (ushort)InputBits.DEFEND) != 0;
 
                     // Apply movement input
                     bool grounded = s.players[i].grounded > 0;

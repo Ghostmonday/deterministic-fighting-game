@@ -88,12 +88,12 @@ namespace NeuralDraft.SimRunner
             // Position players on opposite sides
             state.players[0].posX = -2000 * Fx.SCALE / 1000;  // Left side
             state.players[0].posY = 1000 * Fx.SCALE / 1000;   // Above ground
-            state.players[0].health = characterDefs[0].baseHealth;
+            state.players[0].health = (short)characterDefs[0].baseHealth;
             state.players[0].facing = Facing.RIGHT;
 
             state.players[1].posX = 2000 * Fx.SCALE / 1000;   // Right side
             state.players[1].posY = 1000 * Fx.SCALE / 1000;   // Above ground
-            state.players[1].health = characterDefs[1].baseHealth;
+            state.players[1].health = (short)characterDefs[1].baseHealth;
             state.players[1].facing = Facing.LEFT;
 
             // Create rollback controller (development mode for full hashing)
@@ -179,25 +179,25 @@ namespace NeuralDraft.SimRunner
 
             // Movement inputs (mutually exclusive)
             if (randomValue < 20)
-                inputs |= InputBits.LEFT;
+                inputs = (ushort)(inputs | (ushort)InputBits.LEFT);
             else if (randomValue < 40)
-                inputs |= InputBits.RIGHT;
+                inputs = (ushort)(inputs | (ushort)InputBits.RIGHT);
 
             // Jump input (less frequent)
             if (random.Next(0, 100) < 10)
-                inputs |= InputBits.JUMP;
+                inputs = (ushort)(inputs | (ushort)InputBits.JUMP);
 
             // Attack input (frequency depends on frame)
             if (frame % 30 == playerIndex * 15)  // Different timing for each player
-                inputs |= InputBits.ATTACK;
+                inputs = (ushort)(inputs | (ushort)InputBits.ATTACK);
 
             // Special input (rare)
             if (random.Next(0, 100) < 5)
-                inputs |= InputBits.SPECIAL;
+                inputs = (ushort)(inputs | (ushort)InputBits.SPECIAL);
 
             // Defend input (when not attacking)
-            if ((inputs & InputBits.ATTACK) == 0 && random.Next(0, 100) < 15)
-                inputs |= InputBits.DEFEND;
+            if ((inputs & (ushort)InputBits.ATTACK) == 0 && random.Next(0, 100) < 15)
+                inputs = (ushort)(inputs | (ushort)InputBits.DEFEND);
 
             return inputs;
         }
