@@ -43,7 +43,7 @@ namespace NeuralDraft
             }
             catch (JsonException ex)
             {
-                throw new ArgumentException($"Invalid JSON format: {ex.Message}");
+                throw new ArgumentException("Invalid JSON format: " + ex.Message);
             }
         }
 
@@ -110,7 +110,7 @@ namespace NeuralDraft
                 "BULLET" => ProjectileType.BULLET,
                 "ARROW" => ProjectileType.ARROW,
                 "SHURIKEN" => ProjectileType.SHURIKEN,
-                _ => throw new ArgumentException($"Unknown projectile type: {typeStr}")
+                _ => throw new ArgumentException("Unknown projectile type: " + typeStr)
             };
         }
 

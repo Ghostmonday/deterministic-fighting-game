@@ -21,7 +21,7 @@
 */
 using System;
 
-namespace NeuralDraft
+namespace NeuralDraft.SimRunner
 {
     class Program
     {
@@ -33,7 +33,7 @@ namespace NeuralDraft
             Console.WriteLine("================================================");
             Console.WriteLine("NEURAL DRAFT - Deterministic Simulation Runner");
             Console.WriteLine("================================================");
-            Console.WriteLine($"Running {TOTAL_FRAMES} frames with seed {RANDOM_SEED}");
+            Console.WriteLine("Running " + TOTAL_FRAMES + " frames with seed " + RANDOM_SEED);
             Console.WriteLine();
 
             try
@@ -45,9 +45,9 @@ namespace NeuralDraft
                 Console.WriteLine();
                 Console.WriteLine("================================================");
                 Console.WriteLine("RESULTS:");
-                Console.WriteLine($"  Run 1 Final Hash: 0x{hash1:X8}");
-                Console.WriteLine($"  Run 2 Final Hash: 0x{hash2:X8}");
-                Console.WriteLine($"  Hashes Match: {hash1 == hash2}");
+                Console.WriteLine("  Run 1 Final Hash: 0x" + hash1.ToString("X8"));
+                Console.WriteLine("  Run 2 Final Hash: 0x" + hash2.ToString("X8"));
+                Console.WriteLine("  Hashes Match: " + (hash1 == hash2));
                 Console.WriteLine("================================================");
 
                 if (hash1 == hash2)
@@ -63,7 +63,7 @@ namespace NeuralDraft
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"❌ CRASH: Simulation failed with exception:");
+                Console.WriteLine("❌ CRASH: Simulation failed with exception:");
                 Console.WriteLine(ex.ToString());
                 Environment.Exit(1);
             }
@@ -99,7 +99,7 @@ namespace NeuralDraft
             // Create rollback controller (development mode for full hashing)
             RollbackController controller = new RollbackController(map, characterDefs, isDevelopment: true);
 
-            Console.WriteLine($"Starting simulation with {TOTAL_FRAMES} frames...");
+            Console.WriteLine("Starting simulation with " + TOTAL_FRAMES + " frames...");
 
             for (int frame = 0; frame < TOTAL_FRAMES; frame++)
             {
@@ -117,14 +117,14 @@ namespace NeuralDraft
                 // Progress reporting
                 if (frame % 1000 == 0)
                 {
-                    Console.WriteLine($"  Frame {frame}/{TOTAL_FRAMES} - Player 0 Health: {state.players[0].health}, Player 1 Health: {state.players[1].health}");
+                    Console.WriteLine("  Frame " + frame + "/" + TOTAL_FRAMES + " - Player 0 Health: " + state.players[0].health + ", Player 1 Health: " + state.players[1].health);
                 }
 
                 // Get updated state
                 state = controller.GetState(frame);
             }
 
-            Console.WriteLine($"Simulation completed. Final frame: {state.frameIndex}");
+            Console.WriteLine("Simulation completed. Final frame: " + state.frameIndex);
 
             // Compute final state hash
             uint finalHash = StateHash.Compute(state);

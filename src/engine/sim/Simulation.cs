@@ -140,14 +140,14 @@ namespace NeuralDraft
                 if (lastHashedFrame == s.frameIndex && lastComputedHash != currentHash)
                 {
                     // CRITICAL DESYNC DETECTED
-                    System.Console.WriteLine($"CRITICAL DESYNC at frame {s.frameIndex}:");
-                    System.Console.WriteLine($"  Local Hash: {lastComputedHash:X8}");
-                    System.Console.WriteLine($"  Remote Hash: {currentHash:X8}");
+                    System.Console.WriteLine("CRITICAL DESYNC at frame " + s.frameIndex + ":");
+                    System.Console.WriteLine("  Local Hash: " + lastComputedHash.ToString("X8"));
+                    System.Console.WriteLine("  Remote Hash: " + currentHash.ToString("X8"));
                     System.Console.WriteLine("  State dump:");
                     DumpStateDifferences(s);
 
                     // In a real implementation, you would trigger rollback recovery here
-                    throw new System.Exception($"Determinism violation at frame {s.frameIndex}");
+                    throw new System.Exception("Determinism violation at frame " + s.frameIndex);
                 }
 
                 // Store hash for future comparison
@@ -161,20 +161,20 @@ namespace NeuralDraft
         /// </summary>
         private static void DumpStateDifferences(GameState state)
         {
-            System.Console.WriteLine($"  Frame: {state.frameIndex}");
+            System.Console.WriteLine("  Frame: " + state.frameIndex);
 
             for (int i = 0; i < GameState.MAX_PLAYERS; i++)
             {
                 var player = state.players[i];
-                System.Console.WriteLine($"  Player {i}:");
-                System.Console.WriteLine($"    Position: ({player.posX}, {player.posY})");
-                System.Console.WriteLine($"    Velocity: ({player.velX}, {player.velY})");
-                System.Console.WriteLine($"    Health: {player.health}");
-                System.Console.WriteLine($"    Grounded: {player.grounded}");
-                System.Console.WriteLine($"    Hitstun: {player.hitstunRemaining}");
+                System.Console.WriteLine("  Player " + i + ":");
+                System.Console.WriteLine("    Position: (" + player.posX + ", " + player.posY + ")");
+                System.Console.WriteLine("    Velocity: (" + player.velX + ", " + player.velY + ")");
+                System.Console.WriteLine("    Health: " + player.health);
+                System.Console.WriteLine("    Grounded: " + player.grounded);
+                System.Console.WriteLine("    Hitstun: " + player.hitstunRemaining);
             }
 
-            System.Console.WriteLine($"  Active Projectiles: {state.activeProjectileCount}");
+            System.Console.WriteLine("  Active Projectiles: " + state.activeProjectileCount);
         }
 
         /// <summary>
