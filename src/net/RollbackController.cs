@@ -19,26 +19,31 @@ namespace NeuralDraft
     public class RollbackController
     {
         private const int MAX_ROLLBACK_FRAMES = 120;
-        private const int INPUT_BUFFER_SIZE = 8;
 
         private GameState[] stateBuffer;
-        private byte[][] inputBuffer;
+        private InputFrame[] inputBuffer;
         private int currentFrame;
         private int confirmedFrame;
+        private MapData mapData;
+        private CharacterDef[] characterDefs;
+        private bool isDevelopment;
 
-        public RollbackController()
+        public RollbackController(MapData map, CharacterDef[] characterDefs, bool isDevelopment = true)
         {
             stateBuffer = new GameState[MAX_ROLLBACK_FRAMES];
-            inputBuffer = new byte[MAX_ROLLBACK_FRAMES][];
+            inputBuffer = new InputFrame[MAX_ROLLBACK_FRAMES];
 
             for (int i = 0; i < MAX_ROLLBACK_FRAMES; i++)
             {
                 stateBuffer[i] = new GameState();
-                inputBuffer[i] = new byte[GameState.MAX_PLAYERS * INPUT_BUFFER_SIZE];
+                inputBuffer[i] = InputFrame.Empty(i);
             }
 
             currentFrame = 0;
             confirmedFrame = -1;
+            mapData = map;
+            this.characterDefs = characterDefs;
+            this.isDevelopment = isDevelopment;
         }
 
         public void SaveState(int frame)
@@ -54,29 +59,30 @@ namespace NeuralDraft
             }
         }
 
-        public void SaveInputs(int frame, byte[] inputs, int playerIndex)
+        public void SaveInputs(int frame, InputFrame inputs)
         {
             int bufferIndex = frame % MAX_ROLLBACK_FRAMES;
-            int inputOffset = playerIndex * INPUT_BUFFER_SIZE;
-
-            for (int i = 0; i < INPUT_BUFFER_SIZE; i++)
-            {
-                inputBuffer[bufferIndex][inputOffset + i] = inputs[i];
-            }
+            inputBuffer[bufferIndex] = inputs;
         }
 
-        public byte[] GetInputs(int frame, int playerIndex)
+        public void SavePlayerInputs(int frame, ushort inputs, int playerIndex)
         {
             int bufferIndex = frame % MAX_ROLLBACK_FRAMES;
-            int inputOffset = playerIndex * INPUT_BUFFER_SIZE;
-            byte[] result = new byte[INPUT_BUFFER_SIZE];
+            InputFrame current = inputBuffer[bufferIndex];
+            current.SetPlayerInputs(playerIndex, inputs);
+            inputBuffer[bufferIndex] = current;
+        }
 
-            for (int i = 0; i < INPUT_BUFFER_SIZE; i++)
-            {
-                result[i] = inputBuffer[bufferIndex][inputOffset + i];
-            }
+        public InputFrame GetInputs(int frame)
+        {
+            int bufferIndex = frame % MAX_ROLLBACK_FRAMES;
+            return inputBuffer[bufferIndex];
+        }
 
-            return result;
+        public ushort GetPlayerInputs(int frame, int playerIndex)
+        {
+            int bufferIndex = frame % MAX_ROLLBACK_FRAMES;
+            return inputBuffer[bufferIndex].GetPlayerInputs(playerIndex);
         }
 
         public GameState GetState(int frame)
@@ -85,7 +91,7 @@ namespace NeuralDraft
             return stateBuffer[bufferIndex];
         }
 
-        public void OnRemoteInput(int frame, byte[] inputs, int playerIndex)
+        public void OnRemoteInput(int frame, InputFrame inputs)
         {
             // Check if we need to rollback
             if (frame < currentFrame)
@@ -94,7 +100,25 @@ namespace NeuralDraft
             }
 
             // Save the remote inputs
-            SaveInputs(frame, inputs, playerIndex);
+            SaveInputs(frame, inputs);
+
+            // If we rolled back, resimulate from that frame
+            if (frame < currentFrame)
+            {
+                ResimulateFromFrame(frame);
+            }
+        }
+
+        public void OnRemotePlayerInput(int frame, ushort inputs, int playerIndex)
+        {
+            // Check if we need to rollback
+            if (frame < currentFrame)
+            {
+                RollbackToFrame(frame);
+            }
+
+            // Save the remote inputs
+            SavePlayerInputs(frame, inputs, playerIndex);
 
             // If we rolled back, resimulate from that frame
             if (frame < currentFrame)
@@ -120,10 +144,20 @@ namespace NeuralDraft
             }
         }
 
-        public void TickPrediction()
+        public void TickPrediction(InputFrame localInputs)
         {
             currentFrame++;
             SaveState(currentFrame);
+            SaveInputs(currentFrame, localInputs);
+            SimulateFrame(currentFrame);
+        }
+
+        public void TickPrediction(ushort p0Inputs, ushort p1Inputs)
+        {
+            currentFrame++;
+            SaveState(currentFrame);
+            InputFrame inputs = new InputFrame(currentFrame, p0Inputs, p1Inputs);
+            SaveInputs(currentFrame, inputs);
             SimulateFrame(currentFrame);
         }
 
@@ -131,46 +165,14 @@ namespace NeuralDraft
         {
             // Get the state for this frame
             GameState state = GetState(frame);
+            InputFrame inputs = GetInputs(frame);
 
-            // Apply inputs for each player
-            for (int playerIndex = 0; playerIndex < GameState.MAX_PLAYERS; playerIndex++)
-            {
-                byte[] inputs = GetInputs(frame, playerIndex);
-                ApplyPlayerInputs(ref state.players[playerIndex], inputs);
-            }
-
-            // Apply physics
-            for (int playerIndex = 0; playerIndex < GameState.MAX_PLAYERS; playerIndex++)
-            {
-                PhysicsSystem.ApplyGravity(ref state.players[playerIndex]);
-                // Note: MapData would need to be passed in - this is simplified
-            }
-
-            // Update projectiles
-            // Note: MapData would need to be passed in - this is simplified
+            // Use the new Simulation.Tick method
+            Simulation.Tick(ref state, inputs, mapData, characterDefs, isDevelopment);
 
             // Save the updated state
             int bufferIndex = frame % MAX_ROLLBACK_FRAMES;
             state.CopyTo(stateBuffer[bufferIndex]);
-        }
-
-        private void ApplyPlayerInputs(ref PlayerState player, byte[] inputs)
-        {
-            // Simplified input parsing
-            // In a real implementation, this would parse the byte array into specific actions
-            int inputX = 0;
-            bool jumpPressed = false;
-
-            if (inputs.Length > 0)
-            {
-                // Simple interpretation: first byte for horizontal, second for jump
-                inputX = inputs[0] - 127; // Convert to signed
-                jumpPressed = inputs[1] > 0;
-            }
-
-            // Apply movement (grounded check would need actual collision detection)
-            bool grounded = player.grounded > 0;
-            PhysicsSystem.ApplyMovementInput(ref player, inputX, jumpPressed, grounded);
         }
 
         public int GetCurrentFrame()
@@ -188,11 +190,30 @@ namespace NeuralDraft
                 int oldestFrame = frame - MAX_ROLLBACK_FRAMES;
                 // Clear inputs for frames we no longer need
                 int bufferIndex = oldestFrame % MAX_ROLLBACK_FRAMES;
-                for (int i = 0; i < inputBuffer[bufferIndex].Length; i++)
-                {
-                    inputBuffer[bufferIndex][i] = 0;
-                }
+                inputBuffer[bufferIndex] = InputFrame.Empty(oldestFrame);
             }
+        }
+
+        /// <summary>
+        /// Predict inputs for a frame when remote inputs are missing
+        /// </summary>
+        public InputFrame PredictInputs(int frame)
+        {
+            if (frame <= 0)
+                return InputFrame.Empty(frame);
+
+            // Simple prediction: repeat last known inputs
+            InputFrame lastKnown = GetInputs(frame - 1);
+            return new InputFrame(frame, lastKnown.player0Inputs, lastKnown.player1Inputs);
+        }
+
+        /// <summary>
+        /// Check if predicted inputs match actual inputs (for rollback detection)
+        /// </summary>
+        public bool CheckPrediction(int frame, InputFrame actualInputs)
+        {
+            InputFrame predicted = GetInputs(frame);
+            return predicted.Equals(actualInputs);
         }
     }
 }

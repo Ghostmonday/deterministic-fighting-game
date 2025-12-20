@@ -45,7 +45,7 @@ namespace NeuralDraft
             public int hitPlayerIndex;
         }
 
-        public static HitResult ResolveHit(Hitbox hitbox, Hurtbox hurtbox, int attackerPosX, int attackerPosY)
+        public static HitResult ResolveHit(Hitbox hitbox, Hurtbox hurtbox, int attackerPosX, int attackerPosY, CharacterDef defenderDef)
         {
             var result = new HitResult { hit = false };
 
@@ -58,7 +58,7 @@ namespace NeuralDraft
             int knockbackScalar = hitbox.baseKnockback + (hitbox.damage * hitbox.knockbackGrowth / Fx.SCALE);
 
             // Weight scaling: heavier characters take less knockback
-            int weightFactor = Fx.SCALE * 100 / (hurtbox.weight + 100);
+            int weightFactor = Fx.SCALE * defenderDef.weightFactorBase / (hurtbox.weight + defenderDef.weightFactorBase);
             knockbackScalar = knockbackScalar * weightFactor / Fx.SCALE;
 
             // Determine knockback direction (simplified - always away from attacker)
@@ -88,13 +88,13 @@ namespace NeuralDraft
             result.damageDealt = hitbox.damage;
             result.knockbackX = deltaX * knockbackScalar / Fx.SCALE;
             result.knockbackY = deltaY * knockbackScalar / Fx.SCALE;
-            result.hitstun = hitbox.hitstun;
+            result.hitstun = hitbox.hitstun * defenderDef.hitstunMultiplier / Fx.SCALE;
             result.hitPlayerIndex = hurtbox.playerIndex;
 
             return result;
         }
 
-        public static HitResult[] ResolveCombat(Hitbox[] hitboxes, Hurtbox[] hurtboxes, int[] attackerPositionsX, int[] attackerPositionsY)
+        public static HitResult[] ResolveCombat(Hitbox[] hitboxes, Hurtbox[] hurtboxes, int[] attackerPositionsX, int[] attackerPositionsY, CharacterDef[] characterDefs)
         {
             var results = new HitResult[hitboxes.Length * hurtboxes.Length];
             int resultIndex = 0;
@@ -107,7 +107,8 @@ namespace NeuralDraft
                     if (i == j) continue;
 
                     var result = ResolveHit(hitboxes[i], hurtboxes[j],
-                                          attackerPositionsX[i], attackerPositionsY[i]);
+                                          attackerPositionsX[i], attackerPositionsY[i],
+                                          characterDefs[j]);
 
                     if (result.hit)
                     {

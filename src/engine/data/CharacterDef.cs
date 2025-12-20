@@ -38,10 +38,14 @@ namespace NeuralDraft
         public int airSpeed;         // Horizontal control in air
         public int gravity;          // Character-specific gravity (default = 45)
         public int maxFallSpeed;     // Terminal velocity
+        public int groundFriction;   // Friction applied when grounded (was hardcoded 200)
+        public int airFriction;      // Friction applied in air
 
         // Combat properties
         public int baseHealth;       // Starting health
         public int fastFallSpeed;    // Optional: faster falling when pressing down
+        public int weightFactorBase; // Base value for weight scaling in knockback calculations (was hardcoded 100)
+        public int hitstunMultiplier; // Multiplier for hitstun duration
 
         // Character archetype flags
         public byte archetype;       // 0 = Standard, 1 = Titan, 2 = Ninja, 3 = Elemental
@@ -63,8 +67,12 @@ namespace NeuralDraft
                 airSpeed = 400 * Fx.SCALE / 1000,
                 gravity = 50,                           // Slightly heavier gravity
                 maxFallSpeed = 2500 * Fx.SCALE / 1000,
+                groundFriction = 200,                   // Standard ground friction
+                airFriction = 50,                       // Minimal air friction
                 baseHealth = 120,
                 fastFallSpeed = 3500 * Fx.SCALE / 1000,
+                weightFactorBase = 100,                 // Standard weight scaling
+                hitstunMultiplier = 1000,               // Standard hitstun multiplier
                 archetype = 1
             };
         }
@@ -85,8 +93,12 @@ namespace NeuralDraft
                 airSpeed = 800 * Fx.SCALE / 1000,
                 gravity = 40,                           // Lighter gravity
                 maxFallSpeed = 2000 * Fx.SCALE / 1000,
+                groundFriction = 150,                   // Lower ground friction for slippery feel
+                airFriction = 30,                       // Very low air friction
                 baseHealth = 80,
                 fastFallSpeed = 3000 * Fx.SCALE / 1000,
+                weightFactorBase = 80,                  // Lower weight scaling for lighter knockback
+                hitstunMultiplier = 800,                // Lower hitstun for faster recovery
                 archetype = 2
             };
         }
@@ -107,8 +119,12 @@ namespace NeuralDraft
                 airSpeed = 600 * Fx.SCALE / 1000,
                 gravity = 45,                           // Standard gravity
                 maxFallSpeed = 2200 * Fx.SCALE / 1000,
+                groundFriction = 200,                   // Standard ground friction
+                airFriction = 50,                       // Standard air friction
                 baseHealth = 100,
                 fastFallSpeed = 3200 * Fx.SCALE / 1000,
+                weightFactorBase = 100,                 // Standard weight scaling
+                hitstunMultiplier = 1000,               // Standard hitstun multiplier
                 archetype = 3
             };
         }
@@ -142,6 +158,10 @@ namespace NeuralDraft
             dest.maxFallSpeed = maxFallSpeed;
             dest.baseHealth = baseHealth;
             dest.fastFallSpeed = fastFallSpeed;
+            dest.groundFriction = groundFriction;
+            dest.airFriction = airFriction;
+            dest.weightFactorBase = weightFactorBase;
+            dest.hitstunMultiplier = hitstunMultiplier;
             dest.archetype = archetype;
         }
     }

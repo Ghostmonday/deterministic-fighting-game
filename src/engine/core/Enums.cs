@@ -28,4 +28,18 @@ namespace NeuralDraft
         ARROW = 1,
         SHURIKEN = 2
     }
+
+    [System.Flags]
+    public enum InputBits : ushort
+    {
+        NONE = 0,
+        UP = 1 << 0,
+        DOWN = 1 << 1,
+        LEFT = 1 << 2,
+        RIGHT = 1 << 3,
+        JUMP = 1 << 4,
+        ATTACK = 1 << 5,
+        SPECIAL = 1 << 6,
+        DEFEND = 1 << 7
+    }
 }
