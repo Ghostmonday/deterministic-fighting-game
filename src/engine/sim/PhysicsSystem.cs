@@ -24,16 +24,20 @@ namespace NeuralDraft
                 player.velX = inputX * characterDef.walkSpeed;
                 player.facing = inputX > 0 ? Facing.RIGHT : Facing.LEFT;
             } else {
-                // Apply friction based on whether character is grounded or in air
-                int friction = grounded ? characterDef.groundFriction : characterDef.airFriction;
-                if (player.velX > 0) player.velX = System.Math.Max(0, player.velX - friction);
-                else if (player.velX < 0) player.velX = System.Math.Min(0, player.velX + friction);
+                ApplyFriction(ref player, characterDef, grounded);
             }
 
             if (jumpPressed && grounded) {
                 player.velY = characterDef.jumpForce; // Positive is UP
                 player.grounded = 0;
             }
+        }
+
+        public static void ApplyFriction(ref PlayerState player, CharacterDef characterDef, bool grounded)
+        {
+            int friction = grounded ? characterDef.groundFriction : characterDef.airFriction;
+            if (player.velX > 0) player.velX = System.Math.Max(0, player.velX - friction);
+            else if (player.velX < 0) player.velX = System.Math.Min(0, player.velX + friction);
         }
 
         public static void ApplyGravity(ref PlayerState player, CharacterDef characterDef)

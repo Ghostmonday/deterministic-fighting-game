@@ -26,6 +26,7 @@ namespace NeuralDraft
             public int knockbackGrowth;
             public int hitstun;
             public byte disjoint;
+            public int ownerIndex;
         }
 
         public struct Hurtbox
@@ -97,15 +98,33 @@ namespace NeuralDraft
 
         public static HitResult[] ResolveCombat(Hitbox[] hitboxes, Hurtbox[] hurtboxes, int[] attackerPositionsX, int[] attackerPositionsY, CharacterDef[] characterDefs)
         {
-            var results = new HitResult[hitboxes.Length * hurtboxes.Length];
+            // Legacy wrapper for compatibility
+            var resultsBuffer = new HitResult[hitboxes.Length * hurtboxes.Length];
+            int count = ResolveCombatNonAlloc(hitboxes, hitboxes.Length, hurtboxes, hurtboxes.Length, attackerPositionsX, attackerPositionsY, characterDefs, resultsBuffer);
+
+            var finalResults = new HitResult[count];
+            for (int i = 0; i < count; i++)
+            {
+                finalResults[i] = resultsBuffer[i];
+            }
+            return finalResults;
+        }
+
+        public static int ResolveCombatNonAlloc(
+            Hitbox[] hitboxes, int hitboxCount,
+            Hurtbox[] hurtboxes, int hurtboxCount,
+            int[] attackerPositionsX, int[] attackerPositionsY,
+            CharacterDef[] characterDefs,
+            HitResult[] resultsBuffer)
+        {
             int resultIndex = 0;
 
-            for (int i = 0; i < hitboxes.Length; i++)
+            for (int i = 0; i < hitboxCount; i++)
             {
-                for (int j = 0; j < hurtboxes.Length; j++)
+                for (int j = 0; j < hurtboxCount; j++)
                 {
-                    // Skip self-hit (attacker hitting themselves)
-                    if (i == j) continue;
+                    // Skip self-hit
+                    if (hitboxes[i].ownerIndex == hurtboxes[j].playerIndex) continue;
 
                     var result = ResolveHit(hitboxes[i], hurtboxes[j],
                                           attackerPositionsX[i], attackerPositionsY[i],
@@ -113,19 +132,14 @@ namespace NeuralDraft
 
                     if (result.hit)
                     {
-                        results[resultIndex++] = result;
+                        if (resultIndex < resultsBuffer.Length)
+                        {
+                            resultsBuffer[resultIndex++] = result;
+                        }
                     }
                 }
             }
-
-            // Resize array to actual results
-            var finalResults = new HitResult[resultIndex];
-            for (int i = 0; i < resultIndex; i++)
-            {
-                finalResults[i] = results[i];
-            }
-
-            return finalResults;
+            return resultIndex;
         }
 
         // Integer square root for fixed-point math
