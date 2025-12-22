@@ -78,7 +78,7 @@ namespace NeuralDraft
             }
             else
             {
-                int magnitude = Sqrt(magnitudeSquared);
+                int magnitude = FixedMath.Sqrt(magnitudeSquared);
                 // Prevent division by zero if Sqrt returns 0 for non-zero input
                 if (magnitude == 0) magnitude = 1;
 
@@ -140,20 +140,6 @@ namespace NeuralDraft
                 }
             }
             return resultIndex;
-        }
-
-        // Integer square root for fixed-point math
-        private static int Sqrt(long n)
-        {
-            if (n <= 0) return 0;
-            long x = n;
-            long y = (x + 1) / 2;
-            while (y < x)
-            {
-                x = y;
-                y = (x + n / x) / 2;
-            }
-            return (int)x;
         }
     }
 }
