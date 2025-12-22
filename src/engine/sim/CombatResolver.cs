@@ -68,8 +68,8 @@ namespace NeuralDraft
             int deltaX = dirX - attackerPosX;
             int deltaY = dirY - attackerPosY;
 
-            // Normalize direction (simplified fixed-point normalization)
-            int magnitudeSquared = deltaX * deltaX + deltaY * deltaY;
+            // Normalize direction (fixed-point normalization)
+            long magnitudeSquared = (long)deltaX * deltaX + (long)deltaY * deltaY;
             if (magnitudeSquared == 0)
             {
                 deltaX = Fx.SCALE;
@@ -77,11 +77,12 @@ namespace NeuralDraft
             }
             else
             {
-                // Simplified normalization for deterministic behavior
-                // In a real implementation, you'd use fixed-point square root
-                int approxMagnitude = magnitudeSquared / Fx.SCALE;
-                deltaX = deltaX * Fx.SCALE / approxMagnitude;
-                deltaY = deltaY * Fx.SCALE / approxMagnitude;
+                int magnitude = Sqrt(magnitudeSquared);
+                // Prevent division by zero if Sqrt returns 0 for non-zero input
+                if (magnitude == 0) magnitude = 1;
+
+                deltaX = (int)((long)deltaX * Fx.SCALE / magnitude);
+                deltaY = (int)((long)deltaY * Fx.SCALE / magnitude);
             }
 
             result.hit = true;
@@ -125,6 +126,20 @@ namespace NeuralDraft
             }
 
             return finalResults;
+        }
+
+        // Integer square root for fixed-point math
+        private static int Sqrt(long n)
+        {
+            if (n <= 0) return 0;
+            long x = n;
+            long y = (x + 1) / 2;
+            while (y < x)
+            {
+                x = y;
+                y = (x + n / x) / 2;
+            }
+            return (int)x;
         }
     }
 }
