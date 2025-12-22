@@ -18,18 +18,30 @@ namespace NeuralDraft
 {
     public static class PhysicsSystem
     {
-        public static void ApplyMovementInput(ref PlayerState player, CharacterDef characterDef, int inputX, bool jumpPressed, bool grounded)
+        public static void ApplyMovementInput(ref PlayerState player, CharacterDef characterDef, int inputX, bool jumpPressed, bool grounded, ActionFrame? rootMotionFrame = null)
         {
-            if (inputX != 0) {
-                player.velX = inputX * characterDef.walkSpeed;
-                player.facing = inputX > 0 ? Facing.RIGHT : Facing.LEFT;
-            } else {
-                ApplyFriction(ref player, characterDef, grounded);
+            if (rootMotionFrame.HasValue)
+            {
+                // Root Motion: Override velocity with ActionFrame data
+                player.velX = rootMotionFrame.Value.velX;
+                player.velY = rootMotionFrame.Value.velY;
             }
+            else
+            {
+                if (inputX != 0)
+                {
+                    player.velX = inputX * characterDef.walkSpeed;
+                    player.facing = inputX > 0 ? Facing.RIGHT : Facing.LEFT;
+                }
 
-            if (jumpPressed && grounded) {
-                player.velY = characterDef.jumpForce; // Positive is UP
-                player.grounded = 0;
+                // Apply friction based on whether character is grounded or in air
+                ApplyFriction(ref player, characterDef, grounded);
+
+                if (jumpPressed && grounded)
+                {
+                    player.velY = characterDef.jumpForce; // Positive is UP
+                    player.grounded = 0;
+                }
             }
         }
 
@@ -40,12 +52,17 @@ namespace NeuralDraft
             else if (player.velX < 0) player.velX = System.Math.Min(0, player.velX + friction);
         }
 
-        public static void ApplyGravity(ref PlayerState player, CharacterDef characterDef)
+        public static void ApplyGravity(ref PlayerState player, CharacterDef characterDef, bool ignoreGravity = false)
         {
-            if (player.grounded == 0) {
+            if (ignoreGravity) return;
+
+            if (player.grounded == 0)
+            {
                 player.velY -= characterDef.gravity; // Subtract for Y-Up
                 if (player.velY < -characterDef.maxFallSpeed) player.velY = -characterDef.maxFallSpeed;
-            } else if (player.velY < 0) {
+            }
+            else if (player.velY < 0)
+            {
                 player.velY = 0;
             }
         }
@@ -55,9 +72,25 @@ namespace NeuralDraft
             int newPosX = player.posX + player.velX;
             int newPosY = player.posY + player.velY;
 
+            // Enforce Map Bounds (X-axis)
+            if (map.mapMinX != map.mapMaxX)
+            {
+                if (newPosX < map.mapMinX)
+                {
+                    newPosX = map.mapMinX;
+                    player.velX = 0;
+                }
+                if (newPosX > map.mapMaxX)
+                {
+                    newPosX = map.mapMaxX;
+                    player.velX = 0;
+                }
+            }
+
             // Calculate hitbox bounds based on character definition
             int halfWidth = characterDef.hitboxWidth / 2;
-            AABB playerBounds = new AABB {
+            AABB playerBounds = new AABB
+            {
                 minX = newPosX - halfWidth,
                 maxX = newPosX + halfWidth,
                 minY = newPosY + characterDef.hitboxOffsetY,
@@ -65,22 +98,31 @@ namespace NeuralDraft
             };
 
             player.grounded = 0;
-            if (map.SolidBlocks != null) {
-                for (int blockIndex = 0; blockIndex < map.SolidBlocks.Length; blockIndex++) {
+            if (map.SolidBlocks != null)
+            {
+                for (int blockIndex = 0; blockIndex < map.SolidBlocks.Length; blockIndex++)
+                {
                     var block = map.SolidBlocks[blockIndex];
-                    if (AABB.Overlaps(playerBounds, block)) {
+                    if (AABB.Overlaps(playerBounds, block))
+                    {
                         int overlapX = System.Math.Min(playerBounds.maxX - block.minX, block.maxX - playerBounds.minX);
                         int overlapY = System.Math.Min(playerBounds.maxY - block.minY, block.maxY - playerBounds.minY);
 
-                        if (overlapX < overlapY) {
+                        if (overlapX < overlapY)
+                        {
                             if (playerBounds.minX < block.minX) newPosX = block.minX - halfWidth;
                             else newPosX = block.maxX + halfWidth;
                             player.velX = 0;
-                        } else {
-                            if (playerBounds.minY < block.minY) { // Hit Ceiling
+                        }
+                        else
+                        {
+                            if (playerBounds.minY < block.minY)
+                            { // Hit Ceiling
                                 newPosY = block.minY - characterDef.hitboxHeight - characterDef.hitboxOffsetY;
                                 player.velY = 0;
-                            } else { // Land on Floor
+                            }
+                            else
+                            { // Land on Floor
                                 newPosY = block.maxY - characterDef.hitboxOffsetY;
                                 player.velY = 0;
                                 player.grounded = 1;
@@ -95,7 +137,8 @@ namespace NeuralDraft
                 }
             }
 
-            if (newPosY < map.KillFloorY) { // Check Y < Floor
+            if (newPosY < map.KillFloorY)
+            { // Check Y < Floor
                 newPosX = 0;
                 newPosY = 2000 * Fx.SCALE / 1000; // Reset to sky
                 player.velX = 0;

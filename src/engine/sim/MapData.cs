@@ -37,5 +37,15 @@ namespace NeuralDraft
         /// EXAMPLE: KillFloorY = -2000 means entities die 2000 units below origin
         /// </summary>
         public int KillFloorY;
+
+        /// <summary>
+        /// Minimum X coordinate (left boundary) of the map.
+        /// </summary>
+        public int mapMinX;
+
+        /// <summary>
+        /// Maximum X coordinate (right boundary) of the map.
+        /// </summary>
+        public int mapMaxX;
     }
 }

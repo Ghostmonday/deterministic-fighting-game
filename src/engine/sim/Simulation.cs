@@ -56,7 +56,16 @@ namespace NeuralDraft
             {
                 if (s.players[i].health > 0) // Only apply to alive players
                 {
-                    PhysicsSystem.ApplyGravity(ref s.players[i], defs[i]);
+                    bool ignoreGravity = false;
+                    if (s.players[i].currentActionHash != 0)
+                    {
+                        var action = ActionLibrary.GetAction(s.players[i].currentActionHash);
+                        if (action != null)
+                        {
+                            ignoreGravity = action.ignoreGravity;
+                        }
+                    }
+                    PhysicsSystem.ApplyGravity(ref s.players[i], defs[i], ignoreGravity);
                 }
             }
 
@@ -118,16 +127,21 @@ namespace NeuralDraft
                     bool specialPressed = (playerInputs & (ushort)InputBits.SPECIAL) != 0;
                     bool defendPressed = (playerInputs & (ushort)InputBits.DEFEND) != 0;
 
-                    // Apply movement input
+                    // Apply movement input with root motion support
                     bool grounded = s.players[i].grounded > 0;
+                    ActionFrame? rootMotion = null;
 
-                    // Only allow movement if not in an action or action is cancelable
-                    // For now, we assume simple state: if in action, no movement control (unless action allows it)
-                    // This is a simplification. Real fighting games allow some control.
-                    if (s.players[i].currentActionHash == 0)
+                    if (s.players[i].currentActionHash != 0)
                     {
-                        PhysicsSystem.ApplyMovementInput(ref s.players[i], defs[i], inputX, jumpPressed, grounded);
+                        var action = ActionLibrary.GetAction(s.players[i].currentActionHash);
+                        if (action != null && s.players[i].actionFrameIndex < action.frames.Length)
+                        {
+                            rootMotion = action.frames[s.players[i].actionFrameIndex];
+                        }
                     }
+
+                    // Apply movement input (with root motion if available)
+                    PhysicsSystem.ApplyMovementInput(ref s.players[i], defs[i], inputX, jumpPressed, grounded, rootMotion);
 
                     // Apply combat inputs (Attack > Special > Defend priority)
                     if (s.players[i].currentActionHash == 0)
@@ -144,7 +158,7 @@ namespace NeuralDraft
                         }
                         else if (defendPressed)
                         {
-                             newAction = ActionLibrary.GetAction(defs[i].archetype, InputBits.DEFEND);
+                            newAction = ActionLibrary.GetAction(defs[i].archetype, InputBits.DEFEND);
                         }
 
                         if (newAction != null)
@@ -165,34 +179,13 @@ namespace NeuralDraft
             {
                 if (s.players[i].currentActionHash != 0)
                 {
-                    var action = ActionLibrary.GetActionByHash(defs[i].archetype, s.players[i].currentActionHash);
+                    var action = ActionLibrary.GetAction(s.players[i].currentActionHash);
                     if (action != null)
                     {
-                        // Apply frame data (velocity)
-                        if (s.players[i].actionFrameIndex < action.frames.Length)
-                        {
-                            var frame = action.frames[s.players[i].actionFrameIndex];
-
-                            // Apply velocity override if non-zero (simplified)
-                            // In real engine, we might add to velocity or set it.
-                            if (frame.velX != 0)
-                            {
-                                int dir = s.players[i].facing == Facing.RIGHT ? 1 : -1;
-                                s.players[i].velX = frame.velX * dir;
-                            }
-                            else
-                            {
-                                // Apply friction if no velocity override
-                                PhysicsSystem.ApplyFriction(ref s.players[i], defs[i], s.players[i].grounded > 0);
-                            }
-
-                            if (frame.velY != 0) s.players[i].velY = frame.velY;
-                        }
-
-                        // Advance frame
+                        // Increment frame index
                         s.players[i].actionFrameIndex++;
 
-                        // Check completion
+                        // Check if action is complete
                         if (s.players[i].actionFrameIndex >= action.totalFrames)
                         {
                             s.players[i].currentActionHash = 0;
@@ -201,7 +194,7 @@ namespace NeuralDraft
                     }
                     else
                     {
-                        // Action not found (should not happen), reset
+                        // Action not found, reset
                         s.players[i].currentActionHash = 0;
                         s.players[i].actionFrameIndex = 0;
                     }
@@ -209,190 +202,103 @@ namespace NeuralDraft
             }
         }
 
-        /// <summary>
-        /// Validate state determinism by computing and checking hash.
-        /// </summary>
-        private static void ValidateState(ref GameState s, bool isDevelopment)
-        {
-            int hashFrequency = isDevelopment ? HASH_FREQUENCY_DEVELOPMENT : HASH_FREQUENCY_PRODUCTION;
-
-            // Only compute hash at specified frequency
-            if (s.frameIndex % hashFrequency == 0)
-            {
-                uint currentHash = StateHash.Compute(s);
-
-                // Check for desync if we have a previous hash for this frame
-                if (lastHashedFrame == s.frameIndex && lastComputedHash != currentHash)
-                {
-                    // CRITICAL DESYNC DETECTED
-                    System.Console.WriteLine("CRITICAL DESYNC at frame " + s.frameIndex + ":");
-                    System.Console.WriteLine("  Local Hash: " + lastComputedHash.ToString("X8"));
-                    System.Console.WriteLine("  Remote Hash: " + currentHash.ToString("X8"));
-                    System.Console.WriteLine("  State dump:");
-                    DumpStateDifferences(s);
-
-                    // In a real implementation, you would trigger rollback recovery here
-                    throw new System.Exception("Determinism violation at frame " + s.frameIndex);
-                }
-
-                // Store hash for future comparison
-                lastComputedHash = currentHash;
-                lastHashedFrame = s.frameIndex;
-            }
-        }
-
-        /// <summary>
-        /// Dump state differences for debugging desyncs.
-        /// </summary>
-        private static void DumpStateDifferences(GameState state)
-        {
-            System.Console.WriteLine("  Frame: " + state.frameIndex);
-
-            for (int i = 0; i < GameState.MAX_PLAYERS; i++)
-            {
-                var player = state.players[i];
-                System.Console.WriteLine("  Player " + i + ":");
-                System.Console.WriteLine("    Position: (" + player.posX + ", " + player.posY + ")");
-                System.Console.WriteLine("    Velocity: (" + player.velX + ", " + player.velY + ")");
-                System.Console.WriteLine("    Health: " + player.health);
-                System.Console.WriteLine("    Grounded: " + player.grounded);
-                System.Console.WriteLine("    Hitstun: " + player.hitstunRemaining);
-            }
-
-            System.Console.WriteLine("  Active Projectiles: " + state.activeProjectileCount);
-        }
-
-        // ThreadStatic buffers to avoid allocations per frame while remaining thread-safe
-        [System.ThreadStatic]
-        private static CombatResolver.Hitbox[] _hitboxBuffer;
-        [System.ThreadStatic]
-        private static int[] _attackerXBuffer;
-        [System.ThreadStatic]
-        private static int[] _attackerYBuffer;
-        [System.ThreadStatic]
-        private static CombatResolver.Hurtbox[] _hurtboxBuffer;
-        [System.ThreadStatic]
-        private static CombatResolver.HitResult[] _resultsBuffer;
-
-        private static void EnsureBuffers()
-        {
-            if (_hitboxBuffer == null)
-            {
-                _hitboxBuffer = new CombatResolver.Hitbox[GameState.MAX_PLAYERS * 4];
-                _attackerXBuffer = new int[GameState.MAX_PLAYERS * 4];
-                _attackerYBuffer = new int[GameState.MAX_PLAYERS * 4];
-                _hurtboxBuffer = new CombatResolver.Hurtbox[GameState.MAX_PLAYERS];
-                _resultsBuffer = new CombatResolver.HitResult[GameState.MAX_PLAYERS * 4];
-            }
-        }
-
-        /// <summary>
-        /// Resolve combat using Hitboxes and Hurtboxes from ActionDefs.
-        /// </summary>
         private static void ResolveCombat(ref GameState s, CharacterDef[] defs)
         {
-            EnsureBuffers();
-
-            // 1. Collect Active Hitboxes
-            int hitboxCount = 0;
-
-            for (int i = 0; i < GameState.MAX_PLAYERS; i++)
+            // For each player, check their hitboxes against other players' hurtboxes
+            for (int attackerIdx = 0; attackerIdx < GameState.MAX_PLAYERS; attackerIdx++)
             {
-                if (s.players[i].health <= 0) continue;
+                if (s.players[attackerIdx].health <= 0) continue;
 
-                if (s.players[i].currentActionHash != 0)
+                // Get attacker's current action
+                var attackerAction = ActionLibrary.GetAction(s.players[attackerIdx].currentActionHash);
+                if (attackerAction == null) continue;
+
+                // Check if current frame has hitbox events
+                int currentFrame = s.players[attackerIdx].actionFrameIndex;
+                foreach (var hitboxEvent in attackerAction.hitboxEvents)
                 {
-                    var action = ActionLibrary.GetActionByHash(defs[i].archetype, s.players[i].currentActionHash);
-                    if (action != null && action.hitboxEvents != null)
+                    if (currentFrame >= hitboxEvent.startFrame && currentFrame <= hitboxEvent.endFrame)
                     {
-                        foreach (var hbEvent in action.hitboxEvents)
+                        // Create hitbox from event data
+                        var hitbox = new CombatResolver.Hitbox
                         {
-                            if (s.players[i].actionFrameIndex >= hbEvent.startFrame &&
-                                s.players[i].actionFrameIndex <= hbEvent.endFrame)
+                            bounds = new AABB
                             {
-                                // Check buffer overflow protection
-                                if (hitboxCount >= _hitboxBuffer.Length) break;
+                                minX = s.players[attackerIdx].posX + hitboxEvent.offsetX - hitboxEvent.width / 2,
+                                maxX = s.players[attackerIdx].posX + hitboxEvent.offsetX + hitboxEvent.width / 2,
+                                minY = s.players[attackerIdx].posY + hitboxEvent.offsetY - hitboxEvent.height / 2,
+                                maxY = s.players[attackerIdx].posY + hitboxEvent.offsetY + hitboxEvent.height / 2
+                            },
+                            damage = hitboxEvent.damage,
+                            baseKnockback = hitboxEvent.baseKnockback,
+                            knockbackGrowth = hitboxEvent.knockbackGrowth,
+                            hitstun = hitboxEvent.hitstun,
+                            disjoint = hitboxEvent.disjoint
+                        };
 
-                                // Generate Hitbox
-                                int dir = s.players[i].facing == Facing.RIGHT ? 1 : -1;
-                                int boxCenterX = s.players[i].posX + (hbEvent.offsetX * dir);
-                                int boxCenterY = s.players[i].posY + hbEvent.offsetY;
-                                int boxHalfWidth = hbEvent.width / 2;
+                        // Check against all other players
+                        for (int defenderIdx = 0; defenderIdx < GameState.MAX_PLAYERS; defenderIdx++)
+                        {
+                            if (defenderIdx == attackerIdx) continue;
+                            if (s.players[defenderIdx].health <= 0) continue;
 
-                                var bounds = new AABB
+                            // Create hurtbox from defender
+                            var hurtbox = new CombatResolver.Hurtbox
+                            {
+                                bounds = new AABB
                                 {
-                                    minX = boxCenterX - boxHalfWidth,
-                                    maxX = boxCenterX + boxHalfWidth,
-                                    minY = boxCenterY,
-                                    maxY = boxCenterY + hbEvent.height
-                                };
+                                    minX = s.players[defenderIdx].posX - defs[defenderIdx].hitboxWidth / 2,
+                                    maxX = s.players[defenderIdx].posX + defs[defenderIdx].hitboxWidth / 2,
+                                    minY = s.players[defenderIdx].posY + defs[defenderIdx].hitboxOffsetY,
+                                    maxY = s.players[defenderIdx].posY + defs[defenderIdx].hitboxOffsetY + defs[defenderIdx].hitboxHeight
+                                },
+                                weight = defs[defenderIdx].weight,
+                                playerIndex = defenderIdx
+                            };
 
-                                _hitboxBuffer[hitboxCount] = new CombatResolver.Hitbox
+                            // Resolve hit
+                            var result = CombatResolver.ResolveHit(hitbox, hurtbox,
+                                s.players[attackerIdx].posX, s.players[attackerIdx].posY,
+                                defs[defenderIdx]);
+
+                            if (result.hit)
+                            {
+                                // Apply hit result
+                                s.players[defenderIdx].health -= result.damageDealt;
+                                s.players[defenderIdx].velX += result.knockbackX;
+                                s.players[defenderIdx].velY += result.knockbackY;
+
+                                // Set hitstun
+                                if (result.hitstun > 0)
                                 {
-                                    bounds = bounds,
-                                    damage = hbEvent.damage,
-                                    baseKnockback = hbEvent.baseKnockback,
-                                    knockbackGrowth = hbEvent.knockbackGrowth,
-                                    hitstun = hbEvent.hitstun,
-                                    disjoint = hbEvent.disjoint,
-                                    ownerIndex = i // Set owner index for self-hit check
-                                };
-                                _attackerXBuffer[hitboxCount] = s.players[i].posX;
-                                _attackerYBuffer[hitboxCount] = s.players[i].posY;
-                                hitboxCount++;
+                                    s.players[defenderIdx].currentActionHash = 0;
+                                    s.players[defenderIdx].actionFrameIndex = 0;
+                                    s.players[defenderIdx].hitstunFrames = result.hitstun;
+                                }
                             }
                         }
                     }
                 }
             }
+        }
 
-            // 2. Collect Hurtboxes
-            int hurtboxCount = 0;
-            for (int i = 0; i < GameState.MAX_PLAYERS; i++)
+        private static void ValidateState(ref GameState s, bool isDevelopment)
+        {
+            int hashFrequency = isDevelopment ? HASH_FREQUENCY_DEVELOPMENT : HASH_FREQUENCY_PRODUCTION;
+
+            if (s.frameIndex % hashFrequency == 0 && s.frameIndex != lastHashedFrame)
             {
-                if (s.players[i].health <= 0) continue;
-                if (hurtboxCount >= _hurtboxBuffer.Length) break;
-
-                int halfWidth = defs[i].hitboxWidth / 2;
-                _hurtboxBuffer[hurtboxCount] = new CombatResolver.Hurtbox
+                uint currentHash = StateHash.Compute(ref s);
+                if (lastHashedFrame != -1 && currentHash != lastComputedHash)
                 {
-                    bounds = new AABB
-                    {
-                        minX = s.players[i].posX - halfWidth,
-                        maxX = s.players[i].posX + halfWidth,
-                        minY = s.players[i].posY + defs[i].hitboxOffsetY,
-                        maxY = s.players[i].posY + defs[i].hitboxOffsetY + defs[i].hitboxHeight
-                    },
-                    weight = defs[i].weight,
-                    playerIndex = i
-                };
-                hurtboxCount++;
-            }
-
-            // 3. Resolve (Zero Allocations)
-            int resultCount = CombatResolver.ResolveCombatNonAlloc(
-                _hitboxBuffer, hitboxCount,
-                _hurtboxBuffer, hurtboxCount,
-                _attackerXBuffer, _attackerYBuffer,
-                defs,
-                _resultsBuffer);
-
-            // 4. Apply Results
-            for (int i = 0; i < resultCount; i++)
-            {
-                var result = _resultsBuffer[i];
-                if (result.hit)
-                {
-                    int pIdx = result.hitPlayerIndex;
-                    s.players[pIdx].health = (short)System.Math.Max(0, s.players[pIdx].health - result.damageDealt);
-                    s.players[pIdx].velX += result.knockbackX;
-                    s.players[pIdx].velY += result.knockbackY;
-                    s.players[pIdx].hitstunRemaining = (short)result.hitstun;
-
-                    // Interrupt action on hit
-                    s.players[pIdx].currentActionHash = 0;
-                    s.players[pIdx].actionFrameIndex = 0;
+                    // Desync detected!
+                    throw new System.InvalidOperationException(
+                        $"DESYNC DETECTED at frame {s.frameIndex}! " +
+                        $"Expected hash {lastComputedHash}, got {currentHash}. " +
+                        "This indicates non-deterministic behavior.");
                 }
+                lastComputedHash = currentHash;
+                lastHashedFrame = s.frameIndex;
             }
         }
     }

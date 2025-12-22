@@ -24,6 +24,7 @@ namespace NeuralDraft
         public ActionFrame[] frames;
         public ProjectileSpawn[] projectileSpawns;
         public HitboxEvent[] hitboxEvents;
+        public bool ignoreGravity;
 
         public static int HashActionId(string actionId)
         {

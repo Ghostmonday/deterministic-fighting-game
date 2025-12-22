@@ -35,6 +35,7 @@ namespace NeuralDraft
             attack.actionId = ActionDef.HashActionId(attack.name);
             attack.totalFrames = 20;
             attack.frames = CreateFrames(20);
+            attack.ignoreGravity = false;
 
             // Hitbox active frames 5-10
             attack.hitboxEvents = new HitboxEvent[]
@@ -62,8 +63,13 @@ namespace NeuralDraft
             special.actionId = ActionDef.HashActionId(special.name);
             special.totalFrames = 40;
             special.frames = CreateFrames(40);
-            // Add some movement to frames
-            for(int i=5; i<20; i++) special.frames[i].velX = 2000 * Fx.SCALE / 1000;
+            special.ignoreGravity = false;
+
+            // Add some movement to frames (root motion)
+            for(int i = 5; i < 20; i++)
+            {
+                special.frames[i].velX = 2000 * Fx.SCALE / 1000;
+            }
 
             special.hitboxEvents = new HitboxEvent[]
             {
@@ -90,6 +96,7 @@ namespace NeuralDraft
             defend.actionId = ActionDef.HashActionId(defend.name);
             defend.totalFrames = 30;
             defend.frames = CreateFrames(30);
+            defend.ignoreGravity = false;
             roninActions[InputBits.DEFEND] = defend;
 
             _library[0] = roninActions;
@@ -132,7 +139,7 @@ namespace NeuralDraft
 
         public static ActionDef GetActionByHash(int archetype, int actionHash)
         {
-             // Map all to 0 for testing if not present
+            // Map all to 0 for testing if not present
             if (!_library.ContainsKey(archetype)) archetype = 0;
 
             if (_library.TryGetValue(archetype, out var actions))
@@ -140,6 +147,23 @@ namespace NeuralDraft
                 foreach(var kvp in actions)
                 {
                     if (kvp.Value.actionId == actionHash) return kvp.Value;
+                }
+            }
+            return null;
+        }
+
+        // Added from branch: Simple hash-based lookup for compatibility
+        public static ActionDef GetAction(int actionHash)
+        {
+            // Search through all archetypes
+            foreach (var archetypeActions in _library.Values)
+            {
+                foreach (var action in archetypeActions.Values)
+                {
+                    if (action.actionId == actionHash)
+                    {
+                        return action;
+                    }
                 }
             }
             return null;
