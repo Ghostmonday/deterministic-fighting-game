@@ -78,6 +78,9 @@ namespace NeuralDraft
             else
             {
                 int magnitude = Sqrt(magnitudeSquared);
+                // Prevent division by zero if Sqrt returns 0 for non-zero input
+                if (magnitude == 0) magnitude = 1;
+
                 deltaX = (int)((long)deltaX * Fx.SCALE / magnitude);
                 deltaY = (int)((long)deltaY * Fx.SCALE / magnitude);
             }
