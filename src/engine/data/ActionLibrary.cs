@@ -131,6 +131,7 @@ namespace NeuralDraft
             };
             dashStrike.projectileSpawns = new ProjectileSpawn[0];
             // Note: DashStrike not mapped to input by default, available by hash
+            _actionByHash[dashStrike.actionId] = dashStrike;
 
             _library[0] = roninActions;
         }

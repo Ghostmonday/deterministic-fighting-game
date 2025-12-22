@@ -50,33 +50,24 @@ namespace NeuralDraft
         {
             var result = new HitResult { hit = false };
 
+            // Check for overlap
             if (!AABB.Overlaps(hitbox.bounds, hurtbox.bounds))
-            {
                 return result;
-            }
 
-            // Calculate knockback based on damage, weight, and knockback stats
-            int knockbackScalar = hitbox.baseKnockback + (hitbox.damage * hitbox.knockbackGrowth / Fx.SCALE);
+            // Prevent self-hit
+            if (hitbox.ownerIndex == hurtbox.playerIndex)
+                return result;
 
-            // Weight scaling: heavier characters take less knockback
-            int weightFactor = Fx.SCALE * defenderDef.weightFactorBase / (hurtbox.weight + defenderDef.weightFactorBase);
-            knockbackScalar = knockbackScalar * weightFactor / Fx.SCALE;
+            // Calculate knockback direction (from attacker to defender)
+            int centerX = (hurtbox.bounds.minX + hurtbox.bounds.maxX) / 2;
+            int centerY = (hurtbox.bounds.minY + hurtbox.bounds.maxY) / 2;
 
-            // Determine knockback direction (simplified - always away from attacker)
-            int dirX = hurtbox.bounds.minX + (hurtbox.bounds.maxX - hurtbox.bounds.minX) / 2;
-            int dirY = hurtbox.bounds.minY + (hurtbox.bounds.maxY - hurtbox.bounds.minY) / 2;
+            int deltaX = centerX - attackerPosX;
+            int deltaY = centerY - attackerPosY;
 
-            int deltaX = dirX - attackerPosX;
-            int deltaY = dirY - attackerPosY;
-
-            // Normalize direction (fixed-point normalization)
+            // Normalize direction vector (fixed-point)
             long magnitudeSquared = (long)deltaX * deltaX + (long)deltaY * deltaY;
-            if (magnitudeSquared == 0)
-            {
-                deltaX = Fx.SCALE;
-                deltaY = 0;
-            }
-            else
+            if (magnitudeSquared > 0)
             {
                 int magnitude = FixedMath.Sqrt(magnitudeSquared);
                 // Prevent division by zero if Sqrt returns 0 for non-zero input
@@ -85,29 +76,27 @@ namespace NeuralDraft
                 deltaX = (int)((long)deltaX * Fx.SCALE / magnitude);
                 deltaY = (int)((long)deltaY * Fx.SCALE / magnitude);
             }
+            else
+            {
+                // Directly above/below or same position
+                deltaX = 0;
+                deltaY = Fx.SCALE;
+            }
 
+            // Calculate knockback (weight-based scaling)
+            int knockbackMagnitude = hitbox.baseKnockback + (hitbox.damage * hitbox.knockbackGrowth);
+            int weightFactor = Fx.SCALE * 100 / (100 + defenderDef.weight); // Heavier = less knockback
+
+            result.knockbackX = (int)((long)deltaX * knockbackMagnitude * weightFactor / (Fx.SCALE * Fx.SCALE));
+            result.knockbackY = (int)((long)deltaY * knockbackMagnitude * weightFactor / (Fx.SCALE * Fx.SCALE));
+
+            // Apply results
             result.hit = true;
             result.damageDealt = hitbox.damage;
-            result.knockbackX = deltaX * knockbackScalar / Fx.SCALE;
-            result.knockbackY = deltaY * knockbackScalar / Fx.SCALE;
-            result.hitstun = hitbox.hitstun * defenderDef.hitstunMultiplier / Fx.SCALE;
+            result.hitstun = hitbox.hitstun;
             result.hitPlayerIndex = hurtbox.playerIndex;
 
             return result;
-        }
-
-        public static HitResult[] ResolveCombat(Hitbox[] hitboxes, Hurtbox[] hurtboxes, int[] attackerPositionsX, int[] attackerPositionsY, CharacterDef[] characterDefs)
-        {
-            // Legacy wrapper for compatibility
-            var resultsBuffer = new HitResult[hitboxes.Length * hurtboxes.Length];
-            int count = ResolveCombatNonAlloc(hitboxes, hitboxes.Length, hurtboxes, hurtboxes.Length, attackerPositionsX, attackerPositionsY, characterDefs, resultsBuffer);
-
-            var finalResults = new HitResult[count];
-            for (int i = 0; i < count; i++)
-            {
-                finalResults[i] = resultsBuffer[i];
-            }
-            return finalResults;
         }
 
         public static int ResolveCombatNonAlloc(
@@ -124,11 +113,13 @@ namespace NeuralDraft
                 for (int j = 0; j < hurtboxCount; j++)
                 {
                     // Skip self-hit
-                    if (hitboxes[i].ownerIndex == hurtboxes[j].playerIndex) continue;
+                    if (hitboxes[i].ownerIndex == hurtboxes[j].playerIndex)
+                        continue;
 
-                    var result = ResolveHit(hitboxes[i], hurtboxes[j],
-                                          attackerPositionsX[i], attackerPositionsY[i],
-                                          characterDefs[j]);
+                    var result = ResolveHit(
+                        hitboxes[i], hurtboxes[j],
+                        attackerPositionsX[i], attackerPositionsY[i],
+                        characterDefs[j]);
 
                     if (result.hit)
                     {
