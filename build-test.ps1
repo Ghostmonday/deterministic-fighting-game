@@ -70,8 +70,9 @@ try {
         Copy-Item $sourceFile $destFile -Force
     }
 
-    # Compile using dotnet
-    & dotnet build "$csprojPath" --configuration Release --no-restore
+    # Compile using local dotnet executable
+    & ".\dotnet\dotnet" restore "$csprojPath"
+    & ".\dotnet\dotnet" build "$csprojPath" --configuration Release --no-restore
 
     if ($LASTEXITCODE -eq 0) {
         Write-Host "Compilation successful!" -ForegroundColor Green

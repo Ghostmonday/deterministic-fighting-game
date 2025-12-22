@@ -28,6 +28,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
+using NeuralDraft.Trading.Services;
 using System.Text.Json.Serialization;
 
 namespace NeuralDraft.Trading.Api
