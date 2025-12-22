@@ -56,7 +56,16 @@ namespace NeuralDraft
             {
                 if (s.players[i].health > 0) // Only apply to alive players
                 {
-                    PhysicsSystem.ApplyGravity(ref s.players[i], defs[i]);
+                    bool ignoreGravity = false;
+                    if (s.players[i].currentActionHash != 0)
+                    {
+                        var action = ActionLibrary.GetAction(s.players[i].currentActionHash);
+                        if (action != null)
+                        {
+                            ignoreGravity = action.ignoreGravity;
+                        }
+                    }
+                    PhysicsSystem.ApplyGravity(ref s.players[i], defs[i], ignoreGravity);
                 }
             }
 
@@ -116,7 +125,18 @@ namespace NeuralDraft
 
                     // Apply movement input
                     bool grounded = s.players[i].grounded > 0;
-                    PhysicsSystem.ApplyMovementInput(ref s.players[i], defs[i], inputX, jumpPressed, grounded);
+                    ActionFrame? rootMotion = null;
+
+                    if (s.players[i].currentActionHash != 0)
+                    {
+                        var action = ActionLibrary.GetAction(s.players[i].currentActionHash);
+                        if (action != null && s.players[i].actionFrameIndex < action.frames.Length)
+                        {
+                            rootMotion = action.frames[s.players[i].actionFrameIndex];
+                        }
+                    }
+
+                    PhysicsSystem.ApplyMovementInput(ref s.players[i], defs[i], inputX, jumpPressed, grounded, rootMotion);
 
                     // TODO: Apply combat inputs (attack, special, defend)
                     // This requires ActionDef system to be fully implemented

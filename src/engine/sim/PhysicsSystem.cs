@@ -18,26 +18,34 @@ namespace NeuralDraft
 {
     public static class PhysicsSystem
     {
-        public static void ApplyMovementInput(ref PlayerState player, CharacterDef characterDef, int inputX, bool jumpPressed, bool grounded)
+        public static void ApplyMovementInput(ref PlayerState player, CharacterDef characterDef, int inputX, bool jumpPressed, bool grounded, ActionFrame? rootMotionFrame = null)
         {
-            if (inputX != 0) {
-                player.velX = inputX * characterDef.walkSpeed;
-                player.facing = inputX > 0 ? Facing.RIGHT : Facing.LEFT;
+            if (rootMotionFrame.HasValue) {
+                // Root Motion: Override velocity with ActionFrame data
+                player.velX = rootMotionFrame.Value.velX;
+                player.velY = rootMotionFrame.Value.velY;
             } else {
-                // Apply friction based on whether character is grounded or in air
-                int friction = grounded ? characterDef.groundFriction : characterDef.airFriction;
-                if (player.velX > 0) player.velX = System.Math.Max(0, player.velX - friction);
-                else if (player.velX < 0) player.velX = System.Math.Min(0, player.velX + friction);
-            }
+                if (inputX != 0) {
+                    player.velX = inputX * characterDef.walkSpeed;
+                    player.facing = inputX > 0 ? Facing.RIGHT : Facing.LEFT;
+                } else {
+                    // Apply friction based on whether character is grounded or in air
+                    int friction = grounded ? characterDef.groundFriction : characterDef.airFriction;
+                    if (player.velX > 0) player.velX = System.Math.Max(0, player.velX - friction);
+                    else if (player.velX < 0) player.velX = System.Math.Min(0, player.velX + friction);
+                }
 
-            if (jumpPressed && grounded) {
-                player.velY = characterDef.jumpForce; // Positive is UP
-                player.grounded = 0;
+                if (jumpPressed && grounded) {
+                    player.velY = characterDef.jumpForce; // Positive is UP
+                    player.grounded = 0;
+                }
             }
         }
 
-        public static void ApplyGravity(ref PlayerState player, CharacterDef characterDef)
+        public static void ApplyGravity(ref PlayerState player, CharacterDef characterDef, bool ignoreGravity = false)
         {
+            if (ignoreGravity) return;
+
             if (player.grounded == 0) {
                 player.velY -= characterDef.gravity; // Subtract for Y-Up
                 if (player.velY < -characterDef.maxFallSpeed) player.velY = -characterDef.maxFallSpeed;
@@ -50,6 +58,22 @@ namespace NeuralDraft
         {
             int newPosX = player.posX + player.velX;
             int newPosY = player.posY + player.velY;
+
+            // Enforce Map Bounds (X-axis)
+            // Assuming mapMinX/mapMaxX are set. If 0, we might want to check if they are initialized.
+            // But MapData is a struct, default 0.
+            // If both are 0, it might mean no bounds or world origin.
+            // Let's assume they are set if diff != 0 or just enforce.
+            if (map.mapMinX != map.mapMaxX) {
+                 if (newPosX < map.mapMinX) {
+                     newPosX = map.mapMinX;
+                     player.velX = 0;
+                 }
+                 if (newPosX > map.mapMaxX) {
+                     newPosX = map.mapMaxX;
+                     player.velX = 0;
+                 }
+            }
 
             // Calculate hitbox bounds based on character definition
             int halfWidth = characterDef.hitboxWidth / 2;
