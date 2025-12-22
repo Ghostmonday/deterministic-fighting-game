@@ -40,18 +40,24 @@ namespace NeuralDraft
         /// <param name="inputs">Input frame for this tick</param>
         /// <param name="map">Map collision data</param>
         /// <param name="defs">Character definitions for all players</param>
+        /// <param name="actions">Action library</param>
         /// <param name="isDevelopment">True for development mode (more frequent hashing)</param>
-        public static void Tick(ref GameState s, InputFrame inputs, MapData map, CharacterDef[] defs, bool isDevelopment = true)
+        public static void Tick(ref GameState s, InputFrame inputs, MapData map, CharacterDef[] defs, System.Collections.Generic.Dictionary<int, ActionDef> actions, bool isDevelopment = true)
         {
             // ================================================================================
             // 1. INPUT APPLICATION
             // ================================================================================
-            ApplyInputs(ref s, inputs, defs);
+            ApplyInputs(ref s, inputs, defs, actions);
 
             // ================================================================================
-            // 2. PHYSICS
+            // 2. ACTION PHYSICS (Velocity Override)
             // ================================================================================
-            // 2a. Gravity application
+            ApplyActionPhysics(ref s, actions);
+
+            // ================================================================================
+            // 3. PHYSICS
+            // ================================================================================
+            // 3a. Gravity application
             for (int i = 0; i < GameState.MAX_PLAYERS; i++)
             {
                 if (s.players[i].health > 0) // Only apply to alive players
@@ -60,7 +66,7 @@ namespace NeuralDraft
                 }
             }
 
-            // 2b. Map collision (Resolve X then Y)
+            // 3b. Map collision (Resolve X then Y)
             for (int i = 0; i < GameState.MAX_PLAYERS; i++)
             {
                 if (s.players[i].health > 0)
@@ -69,25 +75,35 @@ namespace NeuralDraft
                 }
             }
 
-            // 2c. Friction (handled inside PhysicsSystem.ApplyMovementInput)
+            // 3c. Friction (handled inside PhysicsSystem.ApplyMovementInput)
 
             // ================================================================================
-            // 3. COMBAT RESOLUTION
+            // 4. ACTION EVENTS (Projectiles)
             // ================================================================================
-            ResolveCombat(ref s, defs);
+            ProcessActionEvents(ref s, actions, defs);
 
             // ================================================================================
-            // 4. ENTITY UPDATES
+            // 5. COMBAT RESOLUTION
+            // ================================================================================
+            ResolveCombat(ref s, defs, actions);
+
+            // ================================================================================
+            // 6. ENTITY UPDATES
             // ================================================================================
             ProjectileSystem.UpdateAllProjectiles(s, map);
 
             // ================================================================================
-            // 5. STATE UPDATES
+            // 7. ACTION PROGRESSION
+            // ================================================================================
+            ProgressActions(ref s, actions);
+
+            // ================================================================================
+            // 8. STATE UPDATES
             // ================================================================================
             s.frameIndex++;
 
             // ================================================================================
-            // 6. STATE VALIDATION (Determinism Audit)
+            // 9. STATE VALIDATION (Determinism Audit)
             // ================================================================================
             ValidateState(ref s, isDevelopment);
         }
@@ -95,7 +111,7 @@ namespace NeuralDraft
         /// <summary>
         /// Apply inputs to player states.
         /// </summary>
-        private static void ApplyInputs(ref GameState s, InputFrame inputs, CharacterDef[] defs)
+        private static void ApplyInputs(ref GameState s, InputFrame inputs, CharacterDef[] defs, System.Collections.Generic.Dictionary<int, ActionDef> actions)
         {
             for (int i = 0; i < GameState.MAX_PLAYERS; i++)
             {
@@ -114,12 +130,100 @@ namespace NeuralDraft
                     bool specialPressed = (playerInputs & (ushort)InputBits.SPECIAL) != 0;
                     bool defendPressed = (playerInputs & (ushort)InputBits.DEFEND) != 0;
 
-                    // Apply movement input
+                    // Apply movement input ONLY if not in an action (or if action logic allows, simplified here)
                     bool grounded = s.players[i].grounded > 0;
-                    PhysicsSystem.ApplyMovementInput(ref s.players[i], defs[i], inputX, jumpPressed, grounded);
 
-                    // TODO: Apply combat inputs (attack, special, defend)
-                    // This requires ActionDef system to be fully implemented
+                    if (s.players[i].currentActionHash == 0)
+                    {
+                        PhysicsSystem.ApplyMovementInput(ref s.players[i], defs[i], inputX, jumpPressed, grounded);
+
+                        // Check for new actions
+                        if (s.players[i].hitstunRemaining == 0)
+                        {
+                            if (attackPressed)
+                            {
+                                s.players[i].currentActionHash = defs[i].defaultAttackActionId;
+                                s.players[i].actionFrameIndex = 0;
+                            }
+                            else if (specialPressed)
+                            {
+                                s.players[i].currentActionHash = defs[i].defaultSpecialActionId;
+                                s.players[i].actionFrameIndex = 0;
+                            }
+                            else if (defendPressed)
+                            {
+                                s.players[i].currentActionHash = defs[i].defaultDefendActionId;
+                                s.players[i].actionFrameIndex = 0;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // In action: check cancelability or other logic (omitted for now)
+                        // Could check for cancelable flag in current frame to allow interrupting
+                    }
+                }
+            }
+        }
+
+        private static void ApplyActionPhysics(ref GameState s, System.Collections.Generic.Dictionary<int, ActionDef> actions)
+        {
+            for (int i = 0; i < GameState.MAX_PLAYERS; i++)
+            {
+                if (s.players[i].health > 0 && s.players[i].currentActionHash != 0)
+                {
+                    if (actions != null && actions.TryGetValue(s.players[i].currentActionHash, out var action))
+                    {
+                        if (s.players[i].actionFrameIndex < action.frames.Length)
+                        {
+                            var frame = action.frames[s.players[i].actionFrameIndex];
+                            // Apply velocity if specified (non-zero)
+                            // Assuming 0 means "no override" or "stop"?
+                            // Let's assume if it's set, we use it.
+                            // For simplicity, let's say if abs(velX) > 0, we set it.
+                            // Or better: actions control movement fully.
+
+                            // If action has velocity defined, apply it relative to facing
+                            if (frame.velX != 0 || frame.velY != 0)
+                            {
+                                int facingDir = (s.players[i].facing == Facing.RIGHT) ? 1 : -1;
+                                s.players[i].velX = frame.velX * facingDir;
+                                s.players[i].velY = frame.velY; // Y is usually absolute (jump)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        private static void ProcessActionEvents(ref GameState s, System.Collections.Generic.Dictionary<int, ActionDef> actions, CharacterDef[] defs)
+        {
+             for (int i = 0; i < GameState.MAX_PLAYERS; i++)
+            {
+                if (s.players[i].health > 0 && s.players[i].currentActionHash != 0)
+                {
+                    if (actions != null && actions.TryGetValue(s.players[i].currentActionHash, out var action))
+                    {
+                        int currentFrame = s.players[i].actionFrameIndex;
+
+                        if (action.projectileSpawns != null)
+                        {
+                            foreach (var spawn in action.projectileSpawns)
+                            {
+                                if (spawn.frame == currentFrame)
+                                {
+                                    int facingDir = (s.players[i].facing == Facing.RIGHT) ? 1 : -1;
+
+                                    int spawnX = s.players[i].posX + (spawn.offsetX * facingDir);
+                                    int spawnY = s.players[i].posY + spawn.offsetY;
+                                    int velX = spawn.velX * facingDir;
+                                    int velY = spawn.velY;
+
+                                    ProjectileSystem.SpawnProjectile(s, spawnX, spawnY, velX, velY, spawn.lifetime, spawn.type);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -181,38 +285,144 @@ namespace NeuralDraft
         /// Basic combat resolution for testing.
         /// In a full implementation, this would use ActionDef to generate hitboxes.
         /// </summary>
-        private static void ResolveCombat(ref GameState s, CharacterDef[] defs)
+        private static void ResolveCombat(ref GameState s, CharacterDef[] defs, System.Collections.Generic.Dictionary<int, ActionDef> actions)
         {
-            // Simple test: if players are close and attacking, deal damage
+            // Collect hitboxes and hurtboxes
+            // Note: In a real implementation, we would use a list or pre-allocated array.
+            // For now, we use arrays assuming max 10 hitboxes/hurtboxes per frame for simplicity.
+
+            int maxHitboxes = GameState.MAX_PLAYERS * 5; // Assumed max per player
+            int maxHurtboxes = GameState.MAX_PLAYERS;
+
+            var hitboxes = new CombatResolver.Hitbox[maxHitboxes];
+            var attackerPositionsX = new int[maxHitboxes];
+            var attackerPositionsY = new int[maxHitboxes];
+            int hitboxCount = 0;
+
+            var hurtboxes = new CombatResolver.Hurtbox[maxHurtboxes];
+            int hurtboxCount = 0;
+
+            // Generate hitboxes from active actions
             for (int i = 0; i < GameState.MAX_PLAYERS; i++)
             {
-                for (int j = 0; j < GameState.MAX_PLAYERS; j++)
+                if (s.players[i].health <= 0) continue;
+
+                // Add hurtbox (body)
+                hurtboxes[hurtboxCount] = new CombatResolver.Hurtbox
                 {
-                    if (i == j || s.players[i].health <= 0 || s.players[j].health <= 0)
-                        continue;
-
-                    // Calculate distance between players
-                    int deltaX = s.players[i].posX - s.players[j].posX;
-                    int deltaY = s.players[i].posY - s.players[j].posY;
-                    int distanceSquared = deltaX * deltaX + deltaY * deltaY;
-
-                    // Simple attack range check (500 units squared)
-                    int attackRange = 500 * Fx.SCALE / 1000;
-                    if (distanceSquared < attackRange * attackRange)
+                    bounds = new AABB
                     {
-                        // Simple damage calculation
-                        int damage = 10;
-                        s.players[j].health = (short)System.Math.Max(0, s.players[j].health - damage);
+                        minX = s.players[i].posX - defs[i].hitboxWidth / 2,
+                        maxX = s.players[i].posX + defs[i].hitboxWidth / 2,
+                        minY = s.players[i].posY,
+                        maxY = s.players[i].posY + defs[i].hitboxHeight
+                    },
+                    weight = defs[i].weight,
+                    playerIndex = i
+                };
+                hurtboxCount++;
 
-                        // Simple knockback
-                        if (deltaX != 0)
+                // Add hitboxes if attacking
+                int actionHash = s.players[i].currentActionHash;
+                if (actionHash != 0 && actions != null && actions.TryGetValue(actionHash, out var action))
+                {
+                    int frame = s.players[i].actionFrameIndex;
+                    if (action.hitboxEvents != null)
+                    {
+                        foreach (var ev in action.hitboxEvents)
                         {
-                            int knockbackDirection = deltaX > 0 ? 1 : -1;
-                            s.players[j].velX += knockbackDirection * 500 * Fx.SCALE / 1000;
-                        }
+                            if (frame >= ev.startFrame && frame < ev.endFrame)
+                            {
+                                int facingDir = (s.players[i].facing == Facing.RIGHT) ? 1 : -1;
 
-                        // Simple hitstun
-                        s.players[j].hitstunRemaining = 10;
+                                int hbCenterX = s.players[i].posX + (ev.offsetX * facingDir);
+                                int hbCenterY = s.players[i].posY + ev.offsetY;
+
+                                hitboxes[hitboxCount] = new CombatResolver.Hitbox
+                                {
+                                    bounds = new AABB
+                                    {
+                                        minX = hbCenterX - ev.width / 2,
+                                        maxX = hbCenterX + ev.width / 2,
+                                        minY = hbCenterY - ev.height / 2,
+                                        maxY = hbCenterY + ev.height / 2
+                                    },
+                                    damage = ev.damage,
+                                    baseKnockback = ev.baseKnockback,
+                                    knockbackGrowth = ev.knockbackGrowth,
+                                    hitstun = ev.hitstun,
+                                    disjoint = ev.disjoint
+                                };
+                                attackerPositionsX[hitboxCount] = s.players[i].posX;
+                                attackerPositionsY[hitboxCount] = s.players[i].posY;
+                                hitboxCount++;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Trim arrays
+            var activeHitboxes = new CombatResolver.Hitbox[hitboxCount];
+            var activeAttackerX = new int[hitboxCount];
+            var activeAttackerY = new int[hitboxCount];
+            for(int k=0; k<hitboxCount; k++) {
+                activeHitboxes[k] = hitboxes[k];
+                activeAttackerX[k] = attackerPositionsX[k];
+                activeAttackerY[k] = attackerPositionsY[k];
+            }
+
+            var activeHurtboxes = new CombatResolver.Hurtbox[hurtboxCount];
+            for(int k=0; k<hurtboxCount; k++) activeHurtboxes[k] = hurtboxes[k];
+
+            // Resolve combat
+            var results = CombatResolver.ResolveCombat(activeHitboxes, activeHurtboxes, activeAttackerX, activeAttackerY, defs);
+
+            // Apply results
+            foreach (var res in results)
+            {
+                if (res.hit)
+                {
+                    // Apply damage
+                    s.players[res.hitPlayerIndex].health = (short)System.Math.Max(0, s.players[res.hitPlayerIndex].health - res.damageDealt);
+
+                    // Apply knockback
+                    s.players[res.hitPlayerIndex].velX = res.knockbackX;
+                    s.players[res.hitPlayerIndex].velY = res.knockbackY;
+
+                    // Apply hitstun
+                    s.players[res.hitPlayerIndex].hitstunRemaining = (short)res.hitstun;
+
+                    // Interrupt action if hit
+                    s.players[res.hitPlayerIndex].currentActionHash = 0;
+                    s.players[res.hitPlayerIndex].actionFrameIndex = 0;
+                }
+            }
+        }
+
+        private static void ProgressActions(ref GameState s, System.Collections.Generic.Dictionary<int, ActionDef> actions)
+        {
+            for (int i = 0; i < GameState.MAX_PLAYERS; i++)
+            {
+                if (s.players[i].health > 0 && s.players[i].currentActionHash != 0)
+                {
+                    if (actions != null && actions.TryGetValue(s.players[i].currentActionHash, out var action))
+                    {
+                        // Increment frame
+                        s.players[i].actionFrameIndex++;
+
+                        // Check if action is finished
+                        if (s.players[i].actionFrameIndex >= action.totalFrames)
+                        {
+                            s.players[i].currentActionHash = 0;
+                            s.players[i].actionFrameIndex = 0;
+                        }
+                    }
+                    else
+                    {
+                        // Unknown action, reset
+                        s.players[i].currentActionHash = 0;
+                        s.players[i].actionFrameIndex = 0;
                     }
                 }
             }

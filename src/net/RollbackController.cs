@@ -27,6 +27,7 @@ namespace NeuralDraft
         private MapData mapData;
         private CharacterDef[] characterDefs;
         private bool isDevelopment;
+        private System.Collections.Generic.Dictionary<int, ActionDef> actionLibrary;
 
         public RollbackController(MapData map, CharacterDef[] characterDefs, bool isDevelopment = true)
         {
@@ -44,6 +45,80 @@ namespace NeuralDraft
             mapData = map;
             this.characterDefs = characterDefs;
             this.isDevelopment = isDevelopment;
+
+            // Initialize dummy action library
+            InitializeActionLibrary();
+        }
+
+        private void InitializeActionLibrary()
+        {
+            actionLibrary = new System.Collections.Generic.Dictionary<int, ActionDef>();
+
+            // Create standard actions
+            CreateDummyAction("ATTACK", 20, 5);
+            CreateDummyAction("SPECIAL", 40, 10);
+            CreateDummyAction("DEFEND", 30, 0);
+
+            // Assign action IDs to characters
+            int attackId = ActionDef.HashActionId("ATTACK");
+            int specialId = ActionDef.HashActionId("SPECIAL");
+            int defendId = ActionDef.HashActionId("DEFEND");
+
+            for (int i = 0; i < characterDefs.Length; i++)
+            {
+                characterDefs[i].defaultAttackActionId = attackId;
+                characterDefs[i].defaultSpecialActionId = specialId;
+                characterDefs[i].defaultDefendActionId = defendId;
+            }
+        }
+
+        private void CreateDummyAction(string name, int duration, int activeFrame)
+        {
+            var action = new ActionDef();
+            action.name = name;
+            action.actionId = ActionDef.HashActionId(name);
+            action.totalFrames = duration;
+            action.frames = new ActionFrame[duration];
+
+            // Basic frame setup
+            for (int i = 0; i < duration; i++)
+            {
+                action.frames[i] = new ActionFrame
+                {
+                    frameNumber = i,
+                    velX = 0,
+                    velY = 0,
+                    cancelable = (byte)(i > duration - 5 ? 1 : 0),
+                    hitstun = 0
+                };
+            }
+
+            // Hitbox setup (single hit)
+            if (activeFrame > 0 && activeFrame < duration)
+            {
+                action.hitboxEvents = new HitboxEvent[1];
+                action.hitboxEvents[0] = new HitboxEvent
+                {
+                    startFrame = activeFrame,
+                    endFrame = activeFrame + 2,
+                    offsetX = 1000 * Fx.SCALE / 1000,
+                    offsetY = 1000 * Fx.SCALE / 1000,
+                    width = 1000 * Fx.SCALE / 1000,
+                    height = 1000 * Fx.SCALE / 1000,
+                    damage = 10,
+                    baseKnockback = 500 * Fx.SCALE / 1000,
+                    knockbackGrowth = 100,
+                    hitstun = 20
+                };
+            }
+            else
+            {
+                action.hitboxEvents = new HitboxEvent[0];
+            }
+
+            action.projectileSpawns = new ProjectileSpawn[0];
+
+            actionLibrary[action.actionId] = action;
         }
 
         public void SaveState(int frame)
@@ -168,7 +243,7 @@ namespace NeuralDraft
             InputFrame inputs = GetInputs(frame);
 
             // Use the new Simulation.Tick method
-            Simulation.Tick(ref state, inputs, mapData, characterDefs, isDevelopment);
+            Simulation.Tick(ref state, inputs, mapData, characterDefs, actionLibrary, isDevelopment);
 
             // Save the updated state
             int bufferIndex = frame % MAX_ROLLBACK_FRAMES;

@@ -37,6 +37,11 @@ namespace NeuralDraft
         public int weightFactorBase; // For knockback formula
         public int hitstunMultiplier;
 
+        // --- Action IDs ---
+        public int defaultAttackActionId;
+        public int defaultSpecialActionId;
+        public int defaultDefendActionId;
+
         // ========================================================================
         // FACTORY METHODS
         // ========================================================================
@@ -331,6 +336,9 @@ namespace NeuralDraft
             dest.fastFallSpeed = fastFallSpeed;
             dest.weightFactorBase = weightFactorBase;
             dest.hitstunMultiplier = hitstunMultiplier;
+            dest.defaultAttackActionId = defaultAttackActionId;
+            dest.defaultSpecialActionId = defaultSpecialActionId;
+            dest.defaultDefendActionId = defaultDefendActionId;
         }
     }
 }
