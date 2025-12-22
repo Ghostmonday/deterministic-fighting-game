@@ -74,7 +74,7 @@ namespace NeuralDraft
             // ================================================================================
             // 3. COMBAT RESOLUTION
             // ================================================================================
-            ResolveCombat(ref s, defs);
+            CombatResolver.ResolveCombatNonAlloc(ref s, defs);
 
             // ================================================================================
             // 4. ENTITY UPDATES
@@ -84,6 +84,7 @@ namespace NeuralDraft
             // ================================================================================
             // 5. STATE UPDATES
             // ================================================================================
+            UpdateActions(ref s);
             s.frameIndex++;
 
             // ================================================================================
@@ -118,8 +119,57 @@ namespace NeuralDraft
                     bool grounded = s.players[i].grounded > 0;
                     PhysicsSystem.ApplyMovementInput(ref s.players[i], defs[i], inputX, jumpPressed, grounded);
 
-                    // TODO: Apply combat inputs (attack, special, defend)
-                    // This requires ActionDef system to be fully implemented
+                    // Input Mapping: Trigger ActionLibrary.RoninSlash on ATTACK
+                    // Ensure player is not already in an action and not in hitstun
+                    if (attackPressed && s.players[i].currentActionHash == 0 && s.players[i].hitstunRemaining == 0)
+                    {
+                        // Simplified: Triggers RoninSlash regardless of character ID for now
+                        // In real implementation, check CharacterDef.archetype or similar
+                        ActionDef attackAction = ActionLibrary.RoninSlash;
+
+                        s.players[i].currentActionHash = attackAction.actionId;
+                        s.players[i].actionFrameIndex = 0;
+                    }
+                }
+            }
+        }
+
+        private static void UpdateActions(ref GameState s)
+        {
+            for (int i = 0; i < GameState.MAX_PLAYERS; i++)
+            {
+                if (s.players[i].health > 0)
+                {
+                    // Hitstun Handling
+                    if (s.players[i].hitstunRemaining > 0)
+                    {
+                        s.players[i].hitstunRemaining--;
+                        // Skip action processing if in hitstun
+                        continue;
+                    }
+
+                    // Advance Action
+                    if (s.players[i].currentActionHash != 0)
+                    {
+                        s.players[i].actionFrameIndex++;
+
+                        ActionDef action = ActionLibrary.GetAction(s.players[i].currentActionHash);
+                        if (action != null)
+                        {
+                            // Action End
+                            if (s.players[i].actionFrameIndex >= action.totalFrames)
+                            {
+                                s.players[i].currentActionHash = 0;
+                                s.players[i].actionFrameIndex = 0;
+                            }
+                        }
+                        else
+                        {
+                            // If action not found, reset
+                            s.players[i].currentActionHash = 0;
+                            s.players[i].actionFrameIndex = 0;
+                        }
+                    }
                 }
             }
         }

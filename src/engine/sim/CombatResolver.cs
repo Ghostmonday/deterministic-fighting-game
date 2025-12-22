@@ -128,6 +128,99 @@ namespace NeuralDraft
             return finalResults;
         }
 
+        public static void ResolveCombatNonAlloc(ref GameState s, CharacterDef[] defs)
+        {
+            for (int i = 0; i < GameState.MAX_PLAYERS; i++)
+            {
+                if (s.players[i].health <= 0) continue;
+
+                // 1. Get Active Hitboxes from Attacker (Player i)
+                int actionHash = s.players[i].currentActionHash;
+                if (actionHash == 0) continue;
+
+                ActionDef action = ActionLibrary.GetAction(actionHash);
+                if (action == null) continue;
+
+                int frame = s.players[i].actionFrameIndex;
+
+                if (action.hitboxEvents != null)
+                {
+                    foreach (var hbEvent in action.hitboxEvents)
+                    {
+                        if (frame >= hbEvent.startFrame && frame <= hbEvent.endFrame)
+                        {
+                            // Construct Hitbox
+                            Hitbox hitbox = new Hitbox
+                            {
+                                damage = hbEvent.damage,
+                                baseKnockback = hbEvent.baseKnockback,
+                                knockbackGrowth = hbEvent.knockbackGrowth,
+                                hitstun = hbEvent.hitstun,
+                                disjoint = hbEvent.disjoint
+                            };
+
+                            // Calculate Hitbox Bounds relative to Attacker
+                            int facingDir = (s.players[i].facing == Facing.RIGHT) ? 1 : -1;
+                            int boxCenterX = s.players[i].posX + (hbEvent.offsetX * facingDir);
+                            int boxCenterY = s.players[i].posY + hbEvent.offsetY;
+
+                            hitbox.bounds = new AABB
+                            {
+                                minX = boxCenterX - hbEvent.width / 2,
+                                maxX = boxCenterX + hbEvent.width / 2,
+                                minY = boxCenterY - hbEvent.height / 2,
+                                maxY = boxCenterY + hbEvent.height / 2
+                            };
+
+                            // 2. Check against Defenders (Player j)
+                            for (int j = 0; j < GameState.MAX_PLAYERS; j++)
+                            {
+                                if (i == j) continue;
+                                if (s.players[j].health <= 0) continue;
+
+                                // Construct Hurtbox for Defender
+                                Hurtbox hurtbox = new Hurtbox
+                                {
+                                    playerIndex = j,
+                                    weight = defs[j].weight,
+                                    bounds = new AABB
+                                    {
+                                        minX = s.players[j].posX - defs[j].hitboxWidth / 2,
+                                        maxX = s.players[j].posX + defs[j].hitboxWidth / 2,
+                                        minY = s.players[j].posY,
+                                        maxY = s.players[j].posY + defs[j].hitboxHeight
+                                    }
+                                };
+                                // Adjust for hitboxOffsetY
+                                hurtbox.bounds.minY += defs[j].hitboxOffsetY;
+                                hurtbox.bounds.maxY += defs[j].hitboxOffsetY;
+
+                                // Resolve Hit
+                                var result = ResolveHit(hitbox, hurtbox, s.players[i].posX, s.players[i].posY, defs[j]);
+
+                                if (result.hit)
+                                {
+                                    // Apply Damage
+                                    s.players[j].health = (short)System.Math.Max(0, s.players[j].health - result.damageDealt);
+
+                                    // Apply Knockback
+                                    s.players[j].velX = result.knockbackX;
+                                    s.players[j].velY = result.knockbackY;
+
+                                    // Apply Hitstun
+                                    s.players[j].hitstunRemaining = (short)result.hitstun;
+
+                                    // Interrupt Defender's Action
+                                    s.players[j].currentActionHash = 0;
+                                    s.players[j].actionFrameIndex = 0;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Integer square root for fixed-point math
         private static int Sqrt(long n)
         {
