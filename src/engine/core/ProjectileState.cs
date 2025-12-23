@@ -26,7 +26,7 @@ namespace NeuralDraft
         public int velY;
         public short lifetimeRemaining;
 
-        public void CopyTo(ProjectileState dst)
+        public void CopyTo(ref ProjectileState dst)
         {
             dst.uid = uid;
             dst.active = active;

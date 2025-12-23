@@ -18,6 +18,8 @@ namespace NeuralDraft
 {
     public class RollbackController
     {
+        // Maximum rollback frames: 120 frames = 2 seconds at 60 FPS
+        // This provides enough buffer for typical network latency while keeping memory usage reasonable
         private const int MAX_ROLLBACK_FRAMES = 120;
 
         private GameState[] stateBuffer;
@@ -48,6 +50,9 @@ namespace NeuralDraft
 
         public void SaveState(int frame)
         {
+            if (frame < 0 || frame >= currentFrame + MAX_ROLLBACK_FRAMES)
+                throw new ArgumentOutOfRangeException(nameof(frame), $"Frame {frame} is out of valid range [0, {currentFrame + MAX_ROLLBACK_FRAMES - 1}]");
+
             int bufferIndex = frame % MAX_ROLLBACK_FRAMES;
             stateBuffer[bufferIndex].frameIndex = frame;
 
@@ -55,18 +60,24 @@ namespace NeuralDraft
             if (frame > 0)
             {
                 int prevIndex = (frame - 1) % MAX_ROLLBACK_FRAMES;
-                stateBuffer[prevIndex].CopyTo(stateBuffer[bufferIndex]);
+                stateBuffer[prevIndex].CopyTo(ref stateBuffer[bufferIndex]);
             }
         }
 
         public void SaveInputs(int frame, InputFrame inputs)
         {
+            if (frame < 0 || frame >= currentFrame + MAX_ROLLBACK_FRAMES)
+                throw new ArgumentOutOfRangeException(nameof(frame), $"Frame {frame} is out of valid range [0, {currentFrame + MAX_ROLLBACK_FRAMES - 1}]");
+
             int bufferIndex = frame % MAX_ROLLBACK_FRAMES;
             inputBuffer[bufferIndex] = inputs;
         }
 
         public void SavePlayerInputs(int frame, ushort inputs, int playerIndex)
         {
+            if (frame < 0 || frame >= currentFrame + MAX_ROLLBACK_FRAMES)
+                throw new ArgumentOutOfRangeException(nameof(frame), $"Frame {frame} is out of valid range [0, {currentFrame + MAX_ROLLBACK_FRAMES - 1}]");
+
             int bufferIndex = frame % MAX_ROLLBACK_FRAMES;
             InputFrame current = inputBuffer[bufferIndex];
             current.SetPlayerInputs(playerIndex, inputs);
@@ -75,18 +86,27 @@ namespace NeuralDraft
 
         public InputFrame GetInputs(int frame)
         {
+            if (frame < 0 || frame >= currentFrame + MAX_ROLLBACK_FRAMES)
+                throw new ArgumentOutOfRangeException(nameof(frame), $"Frame {frame} is out of valid range [0, {currentFrame + MAX_ROLLBACK_FRAMES - 1}]");
+
             int bufferIndex = frame % MAX_ROLLBACK_FRAMES;
             return inputBuffer[bufferIndex];
         }
 
         public ushort GetPlayerInputs(int frame, int playerIndex)
         {
+            if (frame < 0 || frame >= currentFrame + MAX_ROLLBACK_FRAMES)
+                throw new ArgumentOutOfRangeException(nameof(frame), $"Frame {frame} is out of valid range [0, {currentFrame + MAX_ROLLBACK_FRAMES - 1}]");
+
             int bufferIndex = frame % MAX_ROLLBACK_FRAMES;
             return inputBuffer[bufferIndex].GetPlayerInputs(playerIndex);
         }
 
         public GameState GetState(int frame)
         {
+            if (frame < 0 || frame >= currentFrame + MAX_ROLLBACK_FRAMES)
+                throw new ArgumentOutOfRangeException(nameof(frame), $"Frame {frame} is out of valid range [0, {currentFrame + MAX_ROLLBACK_FRAMES - 1}]");
+
             int bufferIndex = frame % MAX_ROLLBACK_FRAMES;
             return stateBuffer[bufferIndex];
         }
@@ -131,7 +151,7 @@ namespace NeuralDraft
         {
             // Rollback to the target frame
             int bufferIndex = targetFrame % MAX_ROLLBACK_FRAMES;
-            stateBuffer[bufferIndex].CopyTo(stateBuffer[currentFrame % MAX_ROLLBACK_FRAMES]);
+            stateBuffer[bufferIndex].CopyTo(ref stateBuffer[currentFrame % MAX_ROLLBACK_FRAMES]);
             currentFrame = targetFrame;
         }
 
@@ -172,7 +192,7 @@ namespace NeuralDraft
 
             // Save the updated state
             int bufferIndex = frame % MAX_ROLLBACK_FRAMES;
-            state.CopyTo(stateBuffer[bufferIndex]);
+            state.CopyTo(ref stateBuffer[bufferIndex]);
         }
 
         public int GetCurrentFrame()

@@ -28,9 +28,8 @@ namespace NeuralDraft
         private const int HASH_FREQUENCY_DEVELOPMENT = 1;   // Every frame in development
         private const int HASH_FREQUENCY_PRODUCTION = 10;   // Every 10 frames in production
 
-        // Last computed hash for desync detection
-        private static uint lastComputedHash = 0;
-        private static int lastHashedFrame = -1;
+        // Validation state tracking (moved to instance level)
+        // Note: These are now tracked by RollbackController or GameState
 
         /// <summary>
         /// Executes one deterministic simulation tick.
@@ -286,19 +285,19 @@ namespace NeuralDraft
         {
             int hashFrequency = isDevelopment ? HASH_FREQUENCY_DEVELOPMENT : HASH_FREQUENCY_PRODUCTION;
 
-            if (s.frameIndex % hashFrequency == 0 && s.frameIndex != lastHashedFrame)
+            if (s.frameIndex % hashFrequency == 0 && s.frameIndex != s.lastValidatedFrame)
             {
                 uint currentHash = StateHash.Compute(ref s);
-                if (lastHashedFrame != -1 && currentHash != lastComputedHash)
+                if (s.lastValidatedFrame != -1 && currentHash != s.lastValidatedHash)
                 {
                     // Desync detected!
                     throw new System.InvalidOperationException(
                         $"DESYNC DETECTED at frame {s.frameIndex}! " +
-                        $"Expected hash {lastComputedHash}, got {currentHash}. " +
+                        $"Expected hash {s.lastValidatedHash}, got {currentHash}. " +
                         "This indicates non-deterministic behavior.");
                 }
-                lastComputedHash = currentHash;
-                lastHashedFrame = s.frameIndex;
+                s.lastValidatedHash = currentHash;
+                s.lastValidatedFrame = s.frameIndex;
             }
         }
     }

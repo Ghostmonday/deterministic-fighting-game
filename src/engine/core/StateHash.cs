@@ -21,7 +21,7 @@ namespace NeuralDraft
         private const uint FNV_PRIME = 16777619;
         private const uint FNV_OFFSET_BASIS = 2166136261;
 
-        public static uint Compute(GameState state)
+        public static uint Compute(ref GameState state)
         {
             uint hash = FNV_OFFSET_BASIS;
 
@@ -31,7 +31,7 @@ namespace NeuralDraft
             // Hash players
             for (int i = 0; i < GameState.MAX_PLAYERS; i++)
             {
-                var player = state.players[i];
+                ref var player = ref state.players[i];
                 hash = FNV1aHash(hash, (uint)player.posX);
                 hash = FNV1aHash(hash, (uint)player.posY);
                 hash = FNV1aHash(hash, (uint)player.velX);
@@ -47,7 +47,7 @@ namespace NeuralDraft
             // Hash projectiles
             for (int i = 0; i < GameState.MAX_PROJECTILES; i++)
             {
-                var projectile = state.projectiles[i];
+                ref var projectile = ref state.projectiles[i];
                 hash = FNV1aHash(hash, (uint)projectile.uid);
                 hash = FNV1aHash(hash, (uint)projectile.active);
                 hash = FNV1aHash(hash, (uint)projectile.posX);

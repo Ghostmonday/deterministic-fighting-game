@@ -29,7 +29,7 @@ namespace NeuralDraft
         public short actionFrameIndex;
         public short hitstunRemaining;
 
-        public void CopyTo(PlayerState dst)
+        public void CopyTo(ref PlayerState dst)
         {
             dst.posX = posX;
             dst.posY = posY;

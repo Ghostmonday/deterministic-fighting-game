@@ -39,11 +39,17 @@ namespace NeuralDraft
         public PlayerState[] players;
         public ProjectileState[] projectiles;
 
+        // Validation state for determinism checking
+        public uint lastValidatedHash;
+        public int lastValidatedFrame;
+
         public GameState()
         {
             frameIndex = 0;
             nextProjectileUid = 0;
             activeProjectileCount = 0;
+            lastValidatedHash = 0;
+            lastValidatedFrame = -1;
 
             players = new PlayerState[MAX_PLAYERS];
             for (int i = 0; i < MAX_PLAYERS; i++)
@@ -58,20 +64,22 @@ namespace NeuralDraft
             }
         }
 
-        public void CopyTo(GameState dst)
+        public void CopyTo(ref GameState dst)
         {
             dst.frameIndex = frameIndex;
             dst.nextProjectileUid = nextProjectileUid;
             dst.activeProjectileCount = activeProjectileCount;
+            dst.lastValidatedHash = lastValidatedHash;
+            dst.lastValidatedFrame = lastValidatedFrame;
 
             for (int i = 0; i < MAX_PLAYERS; i++)
             {
-                players[i].CopyTo(dst.players[i]);
+                players[i].CopyTo(ref dst.players[i]);
             }
 
             for (int i = 0; i < MAX_PROJECTILES; i++)
             {
-                projectiles[i].CopyTo(dst.projectiles[i]);
+                projectiles[i].CopyTo(ref dst.projectiles[i]);
             }
         }
     }

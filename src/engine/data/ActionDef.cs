@@ -28,11 +28,12 @@ namespace NeuralDraft
 
         public static int HashActionId(string actionId)
         {
-            // Simple deterministic hash function
+            // Simple deterministic hash function (FNV-1a variant)
+            // Optimized to avoid enumerator allocation
             uint hash = 2166136261;
-            foreach (char c in actionId)
+            for (int i = 0; i < actionId.Length; i++)
             {
-                hash ^= c;
+                hash ^= actionId[i];
                 hash *= 16777619;
             }
             return (int)hash;

@@ -43,6 +43,10 @@ namespace NeuralDraft
 
         public static CharacterDef GetDefault(byte archetypeId)
         {
+            // Validate archetype ID
+            if (archetypeId > 9)
+                throw new ArgumentOutOfRangeException(nameof(archetypeId), $"Archetype ID must be 0-9, got {archetypeId}");
+
             return archetypeId switch
             {
                 // --- FIRE (The Anchor) ---
@@ -65,7 +69,7 @@ namespace NeuralDraft
                 8 => CreateMystic(),     // East
                 9 => CreateReaper(),     // West
 
-                _ => CreateRonin()       // Fallback
+                _ => CreateRonin()       // Fallback (should never be reached due to validation)
             };
         }
 

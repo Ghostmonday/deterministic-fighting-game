@@ -131,7 +131,7 @@ namespace NeuralDraft.SimRunner
                 ") vs " + characterDefs[1].name + " (Friction: " + characterDefs[1].groundFriction + ")");
 
             // Compute final state hash
-            uint finalHash = StateHash.Compute(state);
+            uint finalHash = StateHash.Compute(ref state);
             return finalHash;
         }
 

@@ -54,6 +54,9 @@ namespace NeuralDraft
         /// </summary>
         public ushort GetPlayerInputs(int playerIndex)
         {
+            if (playerIndex < 0 || playerIndex >= GameState.MAX_PLAYERS)
+                throw new ArgumentOutOfRangeException(nameof(playerIndex), $"Player index must be 0 or 1, got {playerIndex}");
+
             return playerIndex == 0 ? player0Inputs : player1Inputs;
         }
 
@@ -62,6 +65,9 @@ namespace NeuralDraft
         /// </summary>
         public void SetPlayerInputs(int playerIndex, ushort inputs)
         {
+            if (playerIndex < 0 || playerIndex >= GameState.MAX_PLAYERS)
+                throw new ArgumentOutOfRangeException(nameof(playerIndex), $"Player index must be 0 or 1, got {playerIndex}");
+
             if (playerIndex == 0)
                 player0Inputs = inputs;
             else
@@ -81,6 +87,16 @@ namespace NeuralDraft
         /// </summary>
         public static InputFrame FromBytes(byte[] data, int offset)
         {
+            // Validate input parameters
+            if (data == null)
+                throw new ArgumentNullException(nameof(data), "Data array cannot be null");
+
+            if (offset < 0)
+                throw new ArgumentOutOfRangeException(nameof(offset), "Offset cannot be negative");
+
+            if (offset + 8 > data.Length)
+                throw new ArgumentException($"Invalid offset: need 8 bytes but only {data.Length - offset} available", nameof(offset));
+
             return new InputFrame(
                 frameNumber: (data[offset] << 24) | (data[offset + 1] << 16) | (data[offset + 2] << 8) | data[offset + 3],
                 p0Inputs: (ushort)((data[offset + 4] << 8) | data[offset + 5]),

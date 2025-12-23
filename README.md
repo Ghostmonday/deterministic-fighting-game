@@ -2,120 +2,209 @@
 
 A deterministic fighting game engine with rollback netcode implemented in C#. This project implements a complete fighting game simulation system with deterministic physics, networking, and Unity integration.
 
-## Features
-
-- **Deterministic Simulation**: All physics calculations use fixed-point math (Fx.SCALE=1000) for perfect determinism across different machines
-- **Rollback Netcode**: Advanced networking system with prediction, rollback, and resimulation for smooth online play
-- **Collision Detection**: AABB-based collision with swept collision for projectiles to prevent tunneling
-- **Combat System**: Hitbox vs hurtbox resolution with weight-based knockback, disjoint weapons, and hit trading
-- **Unity Integration**: MonoBehaviour-based bridge for rendering game state in Unity
-- **Action System**: JSON-defined actions with timeline events and projectile spawning
-
-## Architecture
-
-The project is organized into four main layers:
-
-### 1. Engine/Core (Data Structures)
-- `Enums.cs` - Game enums (Facing, ProjectileType)
-- `Fx.cs` - Fixed-point math constants
-- `GameState.cs` - Authoritative simulation state
-- `PlayerState.cs` - Deterministic player snapshot
-- `ProjectileState.cs` - Deterministic projectile snapshot
-- `StateHash.cs` - FNV-1a hashing for desync detection
-
-### 2. Engine/Sim (Physics & Logic)
-- `AABB.cs` - Axis-aligned bounding box collision primitive
-- `CombatResolver.cs` - Hit resolution with knockback calculations
-- `MapData.cs` - World definition with solid blocks and kill floor
-- `PhysicsSystem.cs` - Player movement, gravity, and collision
-- `ProjectileSystem.cs` - Anti-tunneling projectile movement with substeps
-
-### 3. Net (Networking)
-- `RollbackController.cs` - Prediction & rollback using ring buffers
-- `UdpInputTransport.cs` - UDP transport with Windows SIO_UDP_CONNRESET fix
-
-### 4. Bridge (Unity Integration)
-- `BattleManager.cs` - MonoBehaviour for simulation and rendering
-
-### Engine/Data (Action Definitions)
-- `ActionDef.cs` - Runtime action data structures
-- `ActionLoader.cs` - JSON deserialization for action definitions
-
-## Getting Started
+## 🚀 Quick Start
 
 ### Prerequisites
-- Unity (for the bridge layer)
-- .NET framework for C# development
+- **.NET 9.0 SDK** - For building and running the engine
+- **PowerShell 5.0+** (Windows) or **Bash** (Linux/macOS) - For build scripts
+- **Unity 2021.3+** (optional) - For visual representation
 
-### Building
-1. Clone the repository:
+### Installation & Setup
+1. **Clone the repository**
    ```bash
    git clone https://github.com/Ghostmonday/deterministic-fighting-game.git
+   cd deterministic-fighting-game
    ```
 
-2. Open the project in Unity or your preferred C# IDE
+2. **Run the master test suite**
+   ```powershell
+   .\test.ps1
+   ```
+   This will run all tests including build, determinism verification, and integration tests.
 
-3. The core engine can be used independently of Unity
+3. **For Unity integration**, see `UNITY_SETUP.md`
 
-### Usage Example
+## 📚 Documentation
 
-```csharp
-// Initialize game state
-var gameState = new GameState();
+### Comprehensive Guides
+- **[DEVELOPMENT_GUIDE.md](DEVELOPMENT_GUIDE.md)** - Complete development reference with architecture, workflows, and best practices
+- **[INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md)** - Game + Paper Trading System integration guide
+- **[UNITY_SETUP.md](UNITY_SETUP.md)** - Unity project setup instructions
 
-// Apply physics
-PhysicsSystem.ApplyGravity(ref gameState.players[0]);
-PhysicsSystem.StepAndCollide(ref gameState.players[0], mapData, deltaTime);
+### Quick References
+- **`scripts/README.md`** - Build and test script documentation
+- **`test.ps1 -Help`** - Master test runner help
+- **`test.ps1 -List`** - List all available tests
 
-// Resolve combat
-var hitResults = CombatResolver.ResolveCombat(hitboxes, hurtboxes, attackerPositions);
+## 🏗️ Architecture
 
-// Network rollback
-var rollbackController = new RollbackController();
-rollbackController.TickPrediction();
+### Core Principles
+- **Deterministic Simulation**: Fixed-point math (Fx.SCALE=1000) for perfect determinism
+- **Rollback Netcode**: Advanced networking with prediction and resimulation
+- **Data-Driven Design**: All tuning in JSON-defined character and action definitions
+- **Unity Integration**: MonoBehaviour bridge for rendering game state
+
+### Key Components
+- **Simulation Loop**: Strict execution order for determinism
+- **Physics System**: Movement, gravity, and collision with AABB detection
+- **Combat Resolver**: Hitbox vs hurtbox resolution with weight-based knockback
+- **Action System**: Timeline-based actions with hitbox events and projectile spawns
+- **State Hashing**: FNV-1a hashing for desync detection and validation
+
+## 🧪 Testing
+
+### Master Test Runner
+Use the unified test runner for all testing needs:
+```powershell
+# Run all tests
+.\test.ps1
+
+# Run specific tests
+.\test.ps1 -Test build
+.\test.ps1 -Test determinism
+.\test.ps1 -Test integration
+
+# List available tests
+.\test.ps1 -List
+
+# Show help
+.\test.ps1 -Help
 ```
 
-## Deterministic Design
+### Test Categories
+- **Build Tests**: Project compilation and .NET environment
+- **Determinism Tests**: Verify identical results across multiple runs
+- **Integration Tests**: Game + Trading system connectivity
+- **Environment Tests**: Development environment validation
 
-The engine ensures perfect determinism through:
+## 🔗 Integration with Paper Trading System
 
-1. **Fixed-Point Math**: All physics uses integer arithmetic with Fx.SCALE=1000
-2. **No Floats**: Avoids floating-point inconsistencies across platforms
-3. **Deterministic Order**: All operations execute in predictable order
-4. **State Hashing**: FNV-1a hashing for desync detection and validation
+The engine integrates with a paper trading system where:
+- **Game → Trading**: Health differentials create sentiment signals
+- **Trading → Game**: Trading decisions can be displayed in-game
 
-## Networking
+### Quick Integration Test
+```powershell
+.\test.ps1 -Test integration
+```
+Requires both game and trading systems running.
 
-The rollback netcode implements:
+## 📁 Project Structure
 
-1. **Input Prediction**: Predict local inputs while waiting for remote inputs
-2. **State Snapshots**: Save game state history in ring buffers
-3. **Rollback & Resimulate**: Rewind and re-simulate when remote inputs arrive
-4. **Desync Detection**: State hashing to detect and recover from desyncs
-
-## Action System
-
-Actions are defined in JSON format (see `src/specs/combat_contract.json`):
-
-```json
-{
-  "action_id": "NINJA_SHURIKEN",
-  "timeline": { "startup": 4, "active": 2, "recovery": 12 },
-  "events": [
-    { "frame": 4, "type": "SPAWN_PROJECTILE", "payload": { "type": "SHURIKEN", "speed_x": 1500 } }
-  ]
-}
+```
+game/
+├── README.md                    # This file
+├── DEVELOPMENT_GUIDE.md         # Comprehensive development guide
+├── INTEGRATION_GUIDE.md         # Game + Trading integration guide
+├── UNITY_SETUP.md              # Unity project setup
+├── SimRunner.csproj            # Main C# project file
+├── test.ps1                    # Master test runner
+│
+├── src/                        # Primary source code
+│   ├── engine/                 # Core game engine
+│   ├── net/                    # Networking layer
+│   ├── bridge/                 # Unity integration
+│   ├── specs/                  # Specification files
+│   └── trading/               # Paper trading system
+│
+├── scripts/                    # Build and test scripts
+│   ├── build-test.ps1         # Build script
+│   ├── test-determinism.ps1   # Determinism verification
+│   ├── test-integration.ps1   # Integration tests
+│   └── README.md              # Script documentation
+│
+├── bin/                        # Compiled binaries
+└── obj/                        # Build objects
 ```
 
-## License
+## 🎮 Features
+
+### Deterministic Simulation
+- Fixed-point mathematics for cross-platform consistency
+- No floating-point arithmetic in core engine
+- Strict execution order for reproducible results
+- State hashing for desync detection
+
+### Networking
+- Rollback netcode with prediction and resimulation
+- UDP transport with connection fixes
+- Input synchronization and state reconciliation
+- Desync recovery mechanisms
+
+### Combat System
+- Hitbox vs hurtbox resolution
+- Weight-based knockback calculations
+- Disjoint weapon support
+- Hit trading mechanics
+- Projectile system with anti-tunneling
+
+### Action System
+- JSON-defined actions with timeline events
+- Startup/active/recovery frame specification
+- Hitbox events with damage and knockback properties
+- Projectile spawn events with type and velocity
+
+## 🛠️ Development
+
+### Adding New Features
+1. **Understand the architecture** - Read `DEVELOPMENT_GUIDE.md`
+2. **Maintain determinism** - Always use fixed-point math
+3. **Test thoroughly** - Use the master test runner
+4. **Update documentation** - Keep guides current
+
+### Code Standards
+- **C# Coding Conventions**: Follow .NET design guidelines
+- **Determinism First**: All changes must maintain determinism
+- **Performance Aware**: Consider allocation and computation costs
+- **Documentation**: Update relevant guides and add code comments
+
+## 🤝 Contributing
+
+### Development Process
+1. **Fork the repository**
+2. **Create a feature branch**
+3. **Implement changes** with tests
+4. **Verify determinism** across multiple runs
+5. **Submit pull request** with documentation
+
+### Testing Requirements
+- **Unit Tests**: For new functionality
+- **Determinism Tests**: Verify identical behavior across runs
+- **Integration Tests**: For system interactions
+- **Performance Tests**: For performance-critical changes
+
+## 🆘 Support
+
+### Getting Help
+1. **Check documentation** first
+2. **Review code examples** in the repository
+3. **Test with provided scripts**
+4. **Examine existing implementations**
+
+### Reporting Issues
+When reporting issues, include:
+1. **Environment details**: OS, .NET version, Unity version
+2. **Reproduction steps**: Clear steps to reproduce the issue
+3. **Expected vs Actual behavior**: What should happen vs what does happen
+4. **Logs and error messages**: Console output and stack traces
+
+### Community
+- **GitHub Issues**: For bug reports and feature requests
+- **Pull Requests**: For contributions and improvements
+- **Documentation Updates**: For corrections and enhancements
+
+## 📄 License
 
 This project is available for use under standard open-source licensing terms.
 
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## Acknowledgments
+## 🙏 Acknowledgments
 
 - Inspired by fighting game netcode implementations like GGPO
 - Built with deterministic principles for competitive gaming
+- Integration with financial trading systems for novel gameplay experiences
+
+---
+
+*Last Updated: December 2024*  
+*Engine Version: 1.0.0*  
+*Determinism Guarantee: Frame-perfect across all platforms*

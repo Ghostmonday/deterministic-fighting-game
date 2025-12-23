@@ -33,11 +33,18 @@ namespace NeuralDraft
         // --- Signal endpoint (local HTTP) ---
         private HttpListener _listener;
         private Thread _listenerThread;
-        private volatile int _lastFrame;
-        private volatile short _p1Hp;
-        private volatile short _p2Hp;
-        private volatile int _stateHash; // optional if you compute it
+        private readonly object _signalLock = new object();
+        private SignalSnapshot _currentSignalSnapshot;
         private const string SIGNAL_PREFIX = "http://localhost:7777/v1/signal/";
+
+        // Signal snapshot struct for atomic updates
+        private struct SignalSnapshot
+        {
+            public int Frame;
+            public short P1Hp;
+            public short P2Hp;
+            public int StateHash;
+        }
 
         // View objects
         public Transform[] playerTransforms;
@@ -154,21 +161,22 @@ namespace NeuralDraft
                     var ctx = _listener.GetContext();
                     var resp = ctx.Response;
 
-                    // Snapshot the latest values (volatile reads)
-                    int frame = _lastFrame;
-                    short p1 = _p1Hp;
-                    short p2 = _p2Hp;
-                    int hash = _stateHash;
+                    // Get atomic snapshot (thread-safe)
+                    SignalSnapshot snapshot;
+                    lock (_signalLock)
+                    {
+                        snapshot = _currentSignalSnapshot;
+                    }
 
                     // Deterministic mapping (simple for Phase 1)
                     // sentiment in [-1, +1] based on advantage
                     // Avoid floats if you want: send milli-units instead.
-                    int diff = p1 - p2;                 // health diff
+                    int diff = snapshot.P1Hp - snapshot.P2Hp;                 // health diff
                     int sentimentMilli = Math.Clamp(diff * 5, -1000, 1000); // 5 milli per HP
 
                     // JSON (keep tiny)
                     string json =
-                        $"{{\"symbol\":\"SDNA\",\"frame\":{frame},\"p1Hp\":{p1},\"p2Hp\":{p2},\"sentimentMilli\":{sentimentMilli},\"stateHash\":{hash}}}";
+                        $"{{\"symbol\":\"SDNA\",\"frame\":{snapshot.Frame},\"p1Hp\":{snapshot.P1Hp},\"p2Hp\":{snapshot.P2Hp},\"sentimentMilli\":{sentimentMilli},\"stateHash\":{snapshot.StateHash}}}";
 
                     byte[] buf = Encoding.UTF8.GetBytes(json);
                     resp.StatusCode = 200;
@@ -210,15 +218,21 @@ namespace NeuralDraft
             rollbackController.TickPrediction(inputs);
 
             // Get current state for rendering
-            rollbackController.GetState(rollbackController.GetCurrentFrame()).CopyTo(renderState);
+            rollbackController.GetState(rollbackController.GetCurrentFrame()).CopyTo(ref renderState);
 
-            // Update signal endpoint snapshot
-            _lastFrame = rollbackController.GetCurrentFrame();
-            _p1Hp = renderState.players[0].health;
-            _p2Hp = renderState.players[1].health;
+            // Update signal endpoint snapshot (atomic update)
+            var snapshot = new SignalSnapshot
+            {
+                Frame = rollbackController.GetCurrentFrame(),
+                P1Hp = renderState.players[0].health,
+                P2Hp = renderState.players[1].health,
+                StateHash = (int)StateHash.Compute(ref renderState)
+            };
 
-            // Compute state hash for signal endpoint
-            _stateHash = (int)StateHash.Compute(renderState);
+            lock (_signalLock)
+            {
+                _currentSignalSnapshot = snapshot;
+            }
         }
 
         ushort CaptureLocalInputs(int playerIndex)
@@ -304,16 +318,44 @@ namespace NeuralDraft
         void OnDestroy()
         {
             // Clean up signal server
-            try
+            if (_listener != null)
             {
-                if (_listener != null)
+                try
                 {
                     _listener.Stop();
                     _listener.Close();
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"Error stopping HTTP listener: {ex.Message}");
+                }
+                finally
+                {
                     _listener = null;
                 }
             }
-            catch { }
+
+            // Clean up listener thread
+            if (_listenerThread != null && _listenerThread.IsAlive)
+            {
+                try
+                {
+                    // Give the thread 2 seconds to finish gracefully
+                    if (!_listenerThread.Join(TimeSpan.FromSeconds(2)))
+                    {
+                        Debug.LogWarning("HTTP listener thread did not stop gracefully, aborting...");
+                        _listenerThread.Abort(); // Last resort
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"Error joining listener thread: {ex.Message}");
+                }
+                finally
+                {
+                    _listenerThread = null;
+                }
+            }
 
             // Clean up network resources
             if (udpTransport != null)
