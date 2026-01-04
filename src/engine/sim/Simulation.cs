@@ -1,4 +1,4 @@
-/* SIMULATION - Deterministic game loop */
+/* SIMULATION - Deterministic game loop with all 10 characters */
 namespace NeuralDraft {
     public static class Simulation {
         private const int HASH_FREQ_DEV = 1;
@@ -17,10 +17,13 @@ namespace NeuralDraft {
                 bool defend = (pins & (ushort)InputBits.DEFEND) != 0;
                 bool special = (pins & (ushort)InputBits.SPECIAL) != 0;
                 
+                // Action selection
                 if (s.players[i].currentActionHash == 0 || CanCancel(s.players[i], defs[i])) {
-                    if (attack) StartAction(ref s.players[i], defs[i], "ATTACK");
+                    if (attack) StartAction(ref s.players[i], defs[i], "LIGHT");
                     else if (special) StartAction(ref s.players[i], defs[i], "SPECIAL");
+                    else if (defend) StartAction(ref s.players[i], defs[i], "HEAVY");
                 }
+                
                 PhysicsSystem.ApplyMovementInput(ref s.players[i], defs[i], ix, jump, s.players[i].grounded != 0);
             }
             
@@ -50,7 +53,7 @@ namespace NeuralDraft {
             if (s.frameIndex % hashFreq == 0) {
                 uint h = StateHash.Compute(ref s);
                 if (s.lastValidatedFrame != -1 && h != s.lastValidatedHash) {
-                    throw new Exception($"DESYNC at frame {s.frameIndex}");
+                    throw new Exception("DESYNC at frame " + s.frameIndex);
                 }
                 s.lastValidatedHash = h;
                 s.lastValidatedFrame = s.frameIndex;
