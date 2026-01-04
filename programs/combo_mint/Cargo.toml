@@ -1,0 +1,20 @@
+[package]
+name = "combo-mint"
+version = "0.1.0"
+description = "Solana Anchor program for combo NFT minting"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[features]
+default = ["no-entrypoint"]
+no-entrypoint = []
+
+[dependencies]
+anchor-lang = "0.25.0"
+anchor-spl = "0.25.0"
+solana-program = "1.14.12"
+
+[profile.release]
+overflow-checks = true
